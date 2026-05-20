@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>規格文件標準化工具</title>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --surface2: #22263a;
+  --border: #2e3250;
+  --accent: #6c63ff;
+  --accent2: #00c9a7;
+  --warn: #ffd93d;
+  --bad: #ff6b6b;
+  --text: #e8eaf6;
+  --text2: #9099c4;
+  --text3: #5a6080;
+  --radius: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 24px 16px 60px;
+}
+.container { max-width: 1100px; margin: 0 auto; }
+
+.header { text-align: center; padding: 36px 0 28px; }
+.header h1 {
+  font-size: 1.9rem; font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: 8px;
+}
+.header p { color: var(--text2); font-size: 0.92rem; }
+
+/* Upload zone */
+.upload-zone {
+  background: var(--surface);
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 48px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  margin-bottom: 24px;
+}
+.upload-zone:hover, .upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(108,99,255,0.05);
+}
+.upload-zone svg { margin-bottom: 16px; opacity: 0.6; }
+.upload-zone h3 { font-size: 1.1rem; margin-bottom: 8px; }
+.upload-zone p { color: var(--text2); font-size: 0.88rem; }
+.upload-zone .formats {
+  display: flex; justify-content: center; gap: 10px; margin-top: 16px; flex-wrap: wrap;
+}
+.fmt-badge {
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 0.8rem; color: var(--text2);
+}
+#fileInput { display: none; }
+
+/* Progress */
+.progress-bar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: none;
+}
+.progress-bar .label { color: var(--text2); font-size: 0.88rem; margin-bottom: 8px; }
+.bar-track { background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; transition: width 0.3s; }
+
+/* Results layout */
+.results { display: none; gap: 20px; grid-template-columns: 340px 1fr; }
+.results.active { display: grid; }
+
+/* Missing fields panel */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.panel-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700; font-size: 0.9rem;
+  display: flex; align-items: center; gap: 8px;
+}
+.panel-body { padding: 16px 18px; }
+
+.missing-list { list-style: none; }
+.missing-item {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.86rem;
+}
+.missing-item:last-child { border-bottom: none; }
+.missing-item .icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+.missing-item .info .field { font-weight: 600; color: var(--text); }
+.missing-item .info .desc { color: var(--text2); margin-top: 2px; font-size: 0.82rem; }
+.severity-critical .icon::before { content: '🔴'; }
+.severity-warn .icon::before { content: '🟡'; }
+.severity-info .icon::before { content: '🔵'; }
+
+.score-ring {
+  text-align: center; padding: 20px 0 16px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.score-num { font-size: 3rem; font-weight: 800; }
+.score-label { color: var(--text2); font-size: 0.82rem; margin-top: 4px; }
+
+.score-good { color: var(--accent2); }
+.score-mid { color: var(--warn); }
+.score-bad { color: var(--bad); }
+
+/* Markdown output */
+.md-panel { display: flex; flex-direction: column; }
+.md-toolbar {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+}
+.md-toolbar span { color: var(--text2); font-size: 0.85rem; flex: 1; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.md-toolbar .btn-group { display: flex; gap: 8px; flex-shrink: 0; }
+.btn {
+  padding: 7px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 0.84rem; font-weight: 600; transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-success { background: var(--accent2); color: #000; }
+
+.md-output {
+  flex: 1;
+  background: var(--surface2);
+  border: none;
+  color: var(--text);
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  padding: 20px;
+  resize: none;
+  min-height: 600px;
+  outline: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.file-info {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 18px;
+  margin-bottom: 20px;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 0.86rem;
+}
+.file-info .file-icon { font-size: 1.4rem; }
+.file-info .file-name { font-weight: 600; }
+.file-info .file-meta { color: var(--text2); font-size: 0.8rem; }
+
+.reset-btn {
+  margin-top: 16px;
+  display: block; width: 100%;
+  padding: 10px; text-align: center;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: transparent; color: var(--text2);
+  cursor: pointer; font-size: 0.84rem; transition: all 0.15s;
+}
+.reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.copy-toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--accent2); color: #000;
+  padding: 10px 20px; border-radius: 8px;
+  font-weight: 600; font-size: 0.88rem;
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; z-index: 999;
+}
+.copy-toast.show { opacity: 1; }
+
+@media (max-width: 768px) {
+  .results.active { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>規格文件標準化工具</h1>
+    <p>上傳 Word / Excel / PPT 規格書 → 自動轉換為標準 Markdown → 提示缺漏欄位</p>
+  </div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".xlsx,.docx,.pptx">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+    </svg>
+    <h3>點擊或拖曳規格文件到這裡</h3>
+    <p>支援來自各單位不同格式的規格書</p>
+    <div class="formats">
+      <span class="fmt-badge">📊 Excel .xlsx</span>
+      <span class="fmt-badge">📝 Word .docx</span>
+      <span class="fmt-badge">📑 PowerPoint .pptx</span>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-bar" id="progressBar">
+    <div class="label" id="progressLabel">正在解析文件...</div>
+    <div class="bar-track"><div class="bar-fill" id="barFill" style="width:0%"></div></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results" id="results">
+    <div>
+      <!-- File info -->
+      <div class="file-info" id="fileInfo"></div>
+
+      <!-- Score + Missing -->
+      <div class="panel">
+        <div class="panel-header">
+          <span>📋</span> 完整度分析
+        </div>
+        <div class="panel-body">
+          <div class="score-ring">
+            <div class="score-num" id="scoreNum">--</div>
+            <div class="score-label">規格完整度</div>
+          </div>
+          <ul class="missing-list" id="missingList"></ul>
+        </div>
+      </div>
+
+      <button class="reset-btn" id="resetBtn">↩ 重新上傳</button>
+    </div>
+
+    <!-- Markdown output -->
+    <div class="panel md-panel">
+      <div class="md-toolbar">
+        <span id="mdLabel">標準化 Markdown 規格書</span>
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="copyMd()">複製</button>
+          <button class="btn btn-success" onclick="downloadPlanMd()">📅 plan.md</button>
+          <button class="btn btn-primary" onclick="downloadMd()">⬇ spec.md</button>
+        </div>
+      </div>
+      <textarea class="md-output" id="mdOutput" spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>
+
+<div class="copy-toast" id="copyToast">已複製到剪貼簿！</div>
+
+<script>
+// ─── Doc type keys & labels ──────────────────────────────────────────────────
+// types: [] = 所有類型都適用；有值 = 只限列出的類型
+const TYPE_LABELS = {
+  tool:     '後台工具規格',
+  activity: 'Web 活動頁',
+  seo:      'SEO 優化需求',
+  feature:  '功能需求',
+  general:  '網頁需求規格',
+};
+
+// ─── Standard fields to check ───────────────────────────────────────────────
+const REQUIRED_FIELDS = [
+  { key: 'id',           label: '製作編號',    severity: 'warn',     types: [],
+    hint: '用於追蹤需求的唯一編號（如 26223）',
+    patterns: [/製作編號|需求編號|工單|ticket/i] },
+  { key: 'title',        label: '需求名稱',    severity: 'critical', types: [],
+    hint: '需求/功能的正式名稱',
+    patterns: [/製作項目|需求名稱|標題|主標/i] },
+  { key: 'owner',        label: '負責窗口',    severity: 'critical', types: [],
+    hint: '提出單位與聯絡人，方便確認需求',
+    patterns: [/負責|窗口|聯絡人|PM|企劃/i] },
+  { key: 'deadline',     label: '完成時間',    severity: 'critical', types: [],
+    hint: '網頁組需完成的截止時間',
+    patterns: [/完成時間|截止|deadline/i] },
+  { key: 'test_time',    label: '測試期間',    severity: 'warn',     types: [],
+    hint: 'QA 或企劃驗證的時間範圍',
+    patterns: [/測試時間|驗證|QA|品檢/i] },
+  { key: 'launch_time',  label: '上線時間',    severity: 'critical', types: [],
+    hint: '正式上線的日期與時間',
+    patterns: [/上線時間|上線日|launch/i] },
+  // 下線時間只有活動頁才需要，工具規格不列
+  { key: 'offline_time', label: '下線時間',    severity: 'warn',     types: ['activity', 'general'],
+    hint: '活動結束下線的時間',
+    patterns: [/下線時間|下線日|結束時間/i] },
+  { key: 'url',          label: '網頁位置',    severity: 'warn',     types: [],
+    hint: '網頁路徑或所在模組位置',
+    patterns: [/網頁位置|路徑|url|https?:\/\//i] },
+  { key: 'func',         label: '功能規格',    severity: 'critical', types: [],
+    hint: '詳細的功能描述、互動行為、流程',
+    patterns: [/功能|規格|玩法|流程|互動/i] },
+  // UI 欄位：工具規格不需要，加入示意圖關鍵字
+  { key: 'ui',           label: 'UI/尺寸規格', severity: 'warn',     types: ['activity', 'feature', 'general'],
+    hint: '顯示尺寸、版面配置（示意圖也算）',
+    patterns: [/尺寸|px|解析度|斷點|responsive|webview|web view|\d{3,4}\s*[*x×]\s*\d{3,4}|示意圖|配置圖|版面配置|畫面配置|大廳配置/i] },
+  // 設計稿：工具規格不需要，加入美術檔名關鍵字
+  { key: 'design',       label: '設計稿位置',  severity: 'info',     types: ['activity', 'feature', 'general'],
+    hint: '設計稿或視覺素材的位置（研四美術 / Figma / .csd 等）',
+    patterns: [/設計稿|視覺|美術|figma|zeplin|主視覺|\.csd|\.psd|\.png|研四/i] },
+  { key: 'device',       label: '裝置支援',    severity: 'info',     types: ['activity', 'feature', 'general'],
+    hint: 'iOS / Android / 桌機 / 指定瀏覽器',
+    patterns: [/iOS|android|桌機|mobile|瀏覽器|裝置/i] },
+  { key: 'accept',       label: '驗收標準',    severity: 'warn',     types: [],
+    hint: '明確的完成條件，讓雙方確認功能完成',
+    patterns: [/驗收|acceptance|完成條件/i] },
+  { key: 'i18n',         label: '多語系翻譯',  severity: 'info',     types: ['activity'],
+    hint: '需要多國語言時，提供各語系文案對照表',
+    patterns: [/翻譯|多語|en\s*\|.*tw|tw\s*\|.*cn/i] },
+  // DB 欄位：工具規格是核心，其餘類型為輔助
+  { key: 'db',           label: 'DB / 資料表', severity: 'warn',     types: ['tool'],
+    hint: '資料庫位置與相關資料表（工具規格必填）',
+    patterns: [/資料庫|資料表|\[dbo\]|\.sql|\d{1,3}\.\d{1,3}\.\d{1,3}/i] },
+  // API 只有活動頁/功能需求才需要，工具規格不列
+  { key: 'api',          label: 'API / 串接規格', severity: 'info',  types: ['activity', 'feature'],
+    hint: '前端需要串接的 API 或後端規格',
+    patterns: [/api|串接|endpoint|接口/i] },
+];
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+function setProgress(pct, label) {
+  document.getElementById('barFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = label;
+}
+
+function showProgress(show) {
+  document.getElementById('progressBar').style.display = show ? 'block' : 'none';
+}
+
+function fileIcon(ext) {
+  if (ext === 'xlsx' || ext === 'xls') return '📊';
+  if (ext === 'docx' || ext === 'doc') return '📝';
+  if (ext === 'pptx' || ext === 'ppt') return '📑';
+  return '📄';
+}
+
+// ─── File parsing ─────────────────────────────────────────────────────────────
+async function parseXlsx(buffer) {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const sheets = {};
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    sheets[name] = rows.map(r => r.map(c => String(c).trim()).filter(Boolean));
+  }
+  return { type: 'xlsx', sheets };
+}
+
+async function parseDocx(buffer) {
+  const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+  return { type: 'docx', text: result.value };
+}
+
+async function parsePptx(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const slideFiles = Object.keys(zip.files)
+    .filter(n => n.match(/^ppt\/slides\/slide\d+\.xml$/))
+    .sort((a, b) => {
+      const na = parseInt(a.match(/\d+/)[0]);
+      const nb = parseInt(b.match(/\d+/)[0]);
+      return na - nb;
+    });
+
+  const slides = [];
+  for (const sf of slideFiles) {
+    const xmlStr = await zip.files[sf].async('text');
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlStr, 'text/xml');
+    const tNodes = doc.querySelectorAll('t');
+    const texts = [];
+    tNodes.forEach(t => { const v = t.textContent.trim(); if (v) texts.push(v); });
+    if (texts.length) slides.push(texts.join(' '));
+  }
+  return { type: 'pptx', slides };
+}
+
+// ─── Content extraction → flat text ─────────────────────────────────────────
+function flattenXlsx(parsed) {
+  const lines = [];
+  for (const [name, rows] of Object.entries(parsed.sheets)) {
+    lines.push(`## Sheet: ${name}`);
+    for (const row of rows) {
+      if (row.length) lines.push(row.join(' | '));
+    }
+  }
+  return lines.join('\n');
+}
+
+function flattenDocx(parsed) { return parsed.text; }
+
+function flattenPptx(parsed) {
+  return parsed.slides.map((s, i) => `## 投影片 ${i + 1}\n${s}`).join('\n\n');
+}
+
+// ─── Doc type detection ───────────────────────────────────────────────────────
+function detectDocType(flatText, fileName) {
+  const t = flatText + fileName;
+  if (/後台工具|gm名單|工具規格|白名單|自動化|排程|admin.*工具|\[dbo\].*欄位|欄位.*\[dbo\]/.test(t)) return 'tool';
+  if (/seo|favicon|meta title|搜尋結果|llms|關鍵字優化/.test(t)) return 'seo';
+  if (/優惠券|line推播|推播.*活動|序號領獎|line.*功能/.test(t)) return 'feature';
+  if (/活動頁|web活動|webview|賓果|足球|百變|主題式|運營活動|競猜|連抽/.test(t)) return 'activity';
+  return 'general';
+}
+
+// ─── Missing field detection ─────────────────────────────────────────────────
+// found[key] = true（有）/ false（無）/ null（此類型不適用）
+function analyzeFields(flatText, docType, fileType) {
+  const found = {};
+  for (const field of REQUIRED_FIELDS) {
+    const applicable = field.types.length === 0 || field.types.includes(docType);
+    if (!applicable) { found[field.key] = null; continue; }
+
+    let detected = field.patterns.some(p => p.test(flatText));
+
+    // PPTX 天生有視覺投影片，自動算「已提供」UI 示意圖與設計稿
+    if (!detected && fileType === 'pptx' && (field.key === 'ui' || field.key === 'design')) {
+      detected = true;
+    }
+
+    found[field.key] = detected;
+  }
+  return found;
+}
+
+// ─── Markdown generation ─────────────────────────────────────────────────────
+function extractValue(flatText, patterns, fallback = '') {
+  for (const p of patterns) {
+    // 用 (?:...) 包住 source，防止 pattern 內的 | 跑出 capture group 外
+    const m = flatText.match(new RegExp('(?:' + p.source + ')[\\s:：]*([^\\n]{1,80})', 'i'));
+    if (m && m[1] != null) return m[1].trim();
+  }
+  return fallback;
+}
+
+function buildMarkdown(flatText, parsed, fileName, found, docType) {
+  const baseName = fileName.replace(/\.[^.]+$/, '');
+  const typeLabel = TYPE_LABELS[docType] || '網頁需求規格';
+  const isTool = docType === 'tool';
+  const isActivity = docType === 'activity' || docType === 'general';
+
+  const get = (patterns, fallback = '⚠️ 未提供') => extractValue(flatText, patterns, fallback);
+  const na = '—（此類型不適用）';
+
+  const title = get([/製作項目[：:\s]/, /需求名稱[：:\s]/, /主標[：:\s]/], baseName);
+  const id = get([/製作編號[：:\s]/, /需求編號[：:\s]/], '⚠️ 未提供');
+  const owner = get([/負責[人窗口][：:\s]/, /聯絡人[：:\s]/], '⚠️ 未提供（請提供提出單位與聯絡人）');
+  const deadline = get([/完成時間[：:\s]/, /截止[：:\s]/], '⚠️ 未提供');
+  const testTime = get([/測試時間[：:\s]/, /品檢[：:\s]/, /驗證[：:\s]/], '⚠️ 未提供');
+  const launchTime = get([/上線時間[：:\s]/], '⚠️ 未提供');
+  const offlineTime = isActivity
+    ? get([/下線時間[：:\s]/, /結束時間[：:\s]/], '⚠️ 未提供')
+    : na;
+  const url = get([/網頁位置[：:\s]/, /路徑[：:\s]/], '⚠️ 未提供');
+
+  // Raw content
+  let rawContent = '';
+  if (parsed.type === 'xlsx') {
+    rawContent = Object.entries(parsed.sheets).map(([name, rows]) => {
+      const validRows = rows.slice(0, 80).filter(r => r.length > 0);
+      if (validRows.length === 0) return null;
+
+      // 找出最大欄數
+      const maxCols = Math.max(...validRows.map(r => r.length));
+
+      // 補齊每列到相同欄數
+      const pad = r => {
+        const cells = [...r];
+        while (cells.length < maxCols) cells.push('');
+        return cells;
+      };
+
+      // 第一列當標頭
+      const header = pad(validRows[0]);
+      const separator = header.map(() => '---');
+      const dataRows = validRows.slice(1).map(pad);
+
+      const lines = [
+        `| ${header.join(' | ')} |`,
+        `| ${separator.join(' | ')} |`,
+        ...dataRows.map(r => `| ${r.join(' | ')} |`),
+      ];
+
+      return `### Sheet：${name}\n\n${lines.join('\n')}`;
+    }).filter(Boolean).join('\n\n');
+  } else if (parsed.type === 'pptx') {
+    rawContent = parsed.slides.slice(0, 20).map((s, i) =>
+      `### 投影片 ${i + 1}\n\n${s}`
+    ).join('\n\n');
+  } else {
+    rawContent = flatText.slice(0, 4000);
+  }
+
+  const openQLines = flatText.split('\n')
+    .filter(l => /待確認|待討論|待補|TBD/.test(l) && l.trim().length > 2)
+    .slice(0, 10).map(l => `- [ ] ${l.trim()}`);
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+
+  // ── AI 任務指令（依文件類型）
+  const AI_TASK = {
+    tool:     '請依照以下規格，製作一個**後台管理工具**網頁（HTML + CSS + JavaScript）。',
+    activity: '請依照以下規格，製作一個 **Web 活動頁面**（HTML + CSS + JavaScript）。',
+    seo:      '請依照以下清單，逐一執行 **SEO 優化**，並說明每項的修改位置與方式。',
+    feature:  '請依照以下規格，製作**功能頁面或互動流程**（HTML + CSS + JavaScript）。',
+    general:  '請依照以下規格，製作對應的**網頁頁面**（HTML + CSS + JavaScript）。',
+  };
+  const aiTask = AI_TASK[docType] || AI_TASK.general;
+
+  // ── 核心需求萃取（從 flatText 找出動作導向的行）
+  const ACTION_KW = /顯示|查詢|輸入|新增|刪除|修改|設定|計算|判斷|更新|篩選|匯出|匯入|點擊|跳轉|驗證|防呆|限制|支援|提供|呈現|欄位|按鈕|選單|彈出|觸發|執行|自動|排程|條件|規則|流程|重置|領取|使用|兌換|購買|排序|統計/;
+  const reqLines = flatText.split('\n')
+    .map(l => l.replace(/^[\s\-\*#\d、。．]+/, '').replace(/\s+/g, ' ').trim())
+    .filter(l => l.length > 8 && l.length < 120)
+    .filter(l => ACTION_KW.test(l))
+    .filter(l => !/^https?:\/\//.test(l))
+    .filter(l => !/^\d{4}[-/]\d/.test(l))
+    .reduce((acc, l) => { if (!acc.includes(l)) acc.push(l); return acc; }, []) // dedupe
+    .slice(0, 25)
+    .map(l => `- [ ] ${l}`);
+
+  // ── UI section（工具規格不輸出）
+  const uiSection = isTool ? '' : `
+---
+
+## 🖥️ UI / 版面規格
+
+| 項目 | 規格 |
+|------|------|
+| 顯示尺寸 | ${get([/尺寸[：:\s]/, /\d{3,4}\s*[*x×]\s*\d{3,4}/], '⚠️ 未提供')} |
+| 版型 | ${get([/直版|橫版|版型/], '⚠️ 未提供（直版 / 橫版）')} |
+| 裝置支援 | ${get([/iOS|android|桌機|裝置/], '⚠️ 未提供')} |
+| 瀏覽器支援 | ${get([/chrome|safari|firefox|ie|edge|瀏覽器/i], '⚠️ 未提供')} |
+`;
+
+  // ── Design section（工具規格不輸出）
+  const designSection = isTool ? '' : `
+---
+
+## 🎨 設計資源
+
+| 項目 | 位置 |
+|------|------|
+| 主視覺 / 設計稿 | ${get([/主視覺[：:\s]/, /設計稿[：:\s]/, /figma|zeplin/i], '⚠️ 未提供')} |
+| 圖片素材 / 美術檔案 | ${get([/素材[：:\s]/, /美術[：:\s]/, /\.csd|\.psd/i], '⚠️ 未提供')} |
+| 文案來源 | ${get([/文案[：:\s]/, /copy[：:\s]/i], '⚠️ 未提供')} |
+`;
+
+  // ── Tech section（依類型調整）
+  const dbRow = `| 資料庫位置 | ${get([/資料庫[：:\s]/, /\d{1,3}\.\d{1,3}\.\d{1,3}/], '⚠️ 未提供')} |`;
+  const tableRow = `| 相關資料表 | ${get([/資料表[：:\s]/, /\[dbo\]/], '⚠️ 未提供')} |`;
+  const apiRow = isTool ? '' : `| API / 串接規格 | ${get([/api[：:\s]/, /串接[：:\s]/i], '⚠️ 未提供')} |`;
+  const permRow = `| 工具權限 | ${get([/工具權限[：:\s]/, /權限[：:\s]/], isTool ? '⚠️ 未提供' : '—')} |`;
+  const refRow = `| 參考連結 | ${get([/參考[：:\s]/, /https?:\/\/[^\s]{10,}/], '⚠️ 未提供')} |`;
+
+  // ── i18n section（只有活動頁）
+  const i18nSection = docType !== 'activity' ? '' : `
+---
+
+## 🌐 多語系文案
+
+${found.i18n ? '（已偵測到翻譯對照表，請從完整規格區整理後提供給 AI）' : '⚠️ 若有多語系需求，請提供各語系文案對照表（繁中 / 簡中 / 英文 / 其他）'}
+`;
+
+  return `# ${title}
+
+---
+
+> 🤖 **AI 任務**：${aiTask}
+> **文件類型**：${typeLabel}　｜　**原始檔案**：\`${fileName}\`　｜　**轉換時間**：${dateStr}
+
+---
+
+## 📋 基本資訊
+
+| 欄位 | 內容 |
+|------|------|
+| 製作編號 | ${id} |
+| 需求類型 | ${typeLabel} |
+| 需求名稱 | ${title} |
+| 提出單位 / 窗口 | ${owner} |
+| 完成時間（網頁組） | ${deadline} |
+| 測試 / 驗證期間 | ${testTime} |
+| 上線時間 | ${launchTime} |
+| 下線時間 | ${offlineTime} |
+| 網頁位置 / 模組路徑 | ${url} |
+
+---
+
+## ✅ 核心需求清單
+
+> 以下為從規格書自動萃取的主要需求，PM 請確認後交付 AI 製作：
+
+${reqLines.length ? reqLines.join('\n') : '（未能自動萃取，請參考下方完整規格內容手動整理）'}
+
+---
+
+## 📄 完整規格內容（參考）
+
+${rawContent}
+${uiSection}${designSection}
+---
+
+## 🔧 技術規格
+
+| 項目 | 內容 |
+|------|------|
+${dbRow}
+${tableRow}
+${apiRow}
+${permRow}
+${refRow}
+
+---
+
+## ✅ 驗收標準
+
+${found.accept ? '（請從原始文件補充驗收條件）' : '⚠️ **缺漏** — 請向提出單位確認：功能完成的具體條件是什麼？由誰驗收？'}
+${i18nSection}
+---
+
+## ❓ 待確認 / 開放問題
+
+${openQLines.length ? openQLines.join('\n') : '（無明確待確認項目）'}
+
+---
+
+## 📎 備註
+
+（其他補充說明）
+
+---
+
+> 💬 **製作指示**：請依照「核心需求清單」與「完整規格內容」製作。
+> 若有任何規格不清楚或資訊缺漏，請**先條列出問題**，待 PM 確認後再開始製作。
+> ⚠️ 標示的欄位代表規格書未提供，需向各單位補充索取。
+`;
+}
+
+// ─── Plan.md 生成 ─────────────────────────────────────────────────────────────
+function buildPlanMd(flatText, fileName, found, docType) {
+  const typeLabel = TYPE_LABELS[docType] || '網頁需求規格';
+  const isTool    = docType === 'tool';
+  const isActivity = docType === 'activity' || docType === 'general';
+
+  const get = (patterns, fallback = '⚠️ 未提供') => extractValue(flatText, patterns, fallback);
+
+  const title       = get([/製作項目[：:\s]/, /需求名稱[：:\s]/, /主標[：:\s]/],
+                          fileName.replace(/\.[^.]+$/, ''));
+  const id          = get([/製作編號[：:\s]/, /需求編號[：:\s]/], '⚠️ 未提供');
+  const owner       = get([/負責[人窗口][：:\s]/, /聯絡人[：:\s]/], '⚠️ 未提供');
+  const deadline    = get([/完成時間[：:\s]/, /截止[：:\s]/], '⚠️ 未提供');
+  const testTime    = get([/測試時間[：:\s]/, /品檢[：:\s]/, /驗證[：:\s]/], '⚠️ 未提供');
+  const launchTime  = get([/上線時間[：:\s]/], '⚠️ 未提供');
+  const offlineTime = isActivity ? get([/下線時間[：:\s]/, /結束時間[：:\s]/], '⚠️ 未提供') : '—';
+  const url         = get([/網頁位置[：:\s]/, /路徑[：:\s]/], '⚠️ 未提供');
+  const ref         = get([/https?:\/\/[^\s]{10,}/], '');
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+
+  // ── 待確認問題
+  const openQLines = flatText.split('\n')
+    .filter(l => /待確認|待討論|待補|TBD/.test(l) && l.trim().length > 2)
+    .slice(0, 15).map(l => `- [ ] ${l.trim()}`);
+
+  // ── 缺漏欄位分級
+  const missing = REQUIRED_FIELDS.filter(f => found[f.key] === false);
+  const missingCritical = missing.filter(f => f.severity === 'critical');
+  const missingWarn     = missing.filter(f => f.severity === 'warn');
+  const missingInfo     = missing.filter(f => f.severity === 'info');
+
+  const fmtMissing = (list) =>
+    list.length ? list.map(f => `- [ ] **${f.label}**：${f.hint}`).join('\n') : '（無）';
+
+  // ── 工作項目（依類型給不同 checklist）
+  const webTasks = isTool ? [
+    '[ ] 了解資料庫結構與欄位定義',
+    '[ ] 製作後台工具頁面（查詢 / 新增 / 刪除）',
+    '[ ] 實作防呆驗證邏輯',
+    '[ ] 串接資料庫查詢',
+    '[ ] 提交測試環境',
+  ] : docType === 'seo' ? [
+    '[ ] 確認修改範疇（標題 / meta / favicon / 結構化資料）',
+    '[ ] 依清單逐項執行優化',
+    '[ ] 驗證修改結果（Search Console）',
+  ] : [
+    '[ ] 取得設計稿與素材',
+    '[ ] 確認版型（直版 / 橫版）與尺寸',
+    '[ ] 製作活動頁面 HTML / CSS / JS',
+    '[ ] 串接活動邏輯 / API',
+    '[ ] 設定活動上線 / 下線排程',
+    '[ ] 提交測試環境',
+  ];
+
+  const designTasks = isTool ? ['—（後台工具通常不需設計稿）'] : [
+    '[ ] 提供主視覺設計稿',
+    '[ ] 提供切圖素材 / 動態檔案',
+    '[ ] 提供所有語系文案',
+  ];
+
+  // ── 時程表（有下線時間才加）
+  const milestones = [
+    `| 規格確認完成   | PM         | ${deadline}    | ⬜ |`,
+    `| 設計稿提供     | 設計組     | ⚠️ 未提供      | ⬜ |`,
+    `| 開發完成       | 網頁組     | ${deadline}    | ⬜ |`,
+    `| QA / 企劃驗證  | 品檢 / 企劃| ${testTime}    | ⬜ |`,
+    `| 正式上線       | 網頁組     | ${launchTime}  | ⬜ |`,
+    isActivity ? `| 活動下線       | 網頁組     | ${offlineTime} | ⬜ |` : null,
+  ].filter(Boolean);
+
+  return `# ${title} — 計畫導向規格書
+
+> 版本：v1.0　｜　建立時間：${dateStr}　｜　文件類型：${typeLabel}
+> 原始檔案：\`${fileName}\`
+
+---
+
+## 📌 專案概覽
+
+| 欄位 | 內容 |
+|------|------|
+| 製作編號 | ${id} |
+| 需求名稱 | ${title} |
+| 需求類型 | ${typeLabel} |
+| 提出單位 / 窗口 | ${owner} |
+| 網頁位置 / 模組 | ${url} |
+${ref ? `| 參考連結 | ${ref} |` : ''}
+
+---
+
+## 📅 時程里程碑
+
+| 里程碑 | 負責單位 | 預計時間 | 狀態 |
+|--------|---------|---------|------|
+${milestones.join('\n')}
+
+---
+
+## 🗂️ 工作項目拆解
+
+### 📋 PM（規格確認與驗收）
+- [ ] 確認規格書完整性
+- [ ] 向各單位索取缺漏資訊（見下方清單）
+- [ ] 確認設計稿與素材齊全
+- [ ] 於測試期間進行驗收
+- [ ] 確認上線結果
+
+### 💻 網頁組
+${webTasks.map(t => `- ${t}`).join('\n')}
+
+### 🎨 設計組
+${designTasks.map(t => `- ${t}`).join('\n')}
+
+### 🔍 品檢 / QA
+- [ ] 功能逐項驗證（依核心需求清單）
+- [ ] 跨裝置 / 瀏覽器測試
+- [ ] 回報問題並追蹤修正
+
+---
+
+## ⚠️ 需向各單位補充的資訊
+
+### 🔴 必須補齊（影響開發無法進行）
+${fmtMissing(missingCritical)}
+
+### 🟡 建議補充（影響品質）
+${fmtMissing(missingWarn)}
+
+### 🔵 有提供更好（補充資訊）
+${fmtMissing(missingInfo)}
+
+---
+
+## ❓ 待確認問題清單
+
+${openQLines.length ? openQLines.join('\n') : '（文件中無明確待確認項目）'}
+
+---
+
+## ✅ 驗收標準
+
+${found.accept ? '（請從原始文件補充驗收條件）' : '⚠️ **缺漏** — 請向提出單位確認：功能完成的具體條件？由誰驗收？'}
+
+---
+
+## 📎 備註
+
+（其他補充說明）
+
+---
+*此計畫書由「規格文件標準化工具」自動生成，PM 請確認後分發給各相關單位。*
+`;
+}
+
+// ─── Score calculation（跳過 null = 不適用欄位）────────────────────────────
+function calcScore(found) {
+  const weights = { critical: 3, warn: 2, info: 1 };
+  let total = 0, got = 0;
+  for (const f of REQUIRED_FIELDS) {
+    if (found[f.key] === null) continue; // 不適用此類型
+    const w = weights[f.severity];
+    total += w;
+    if (found[f.key]) got += w;
+  }
+  return total === 0 ? 100 : Math.round((got / total) * 100);
+}
+
+// ─── Render missing list ──────────────────────────────────────────────────────
+function renderMissing(found) {
+  const list = document.getElementById('missingList');
+  list.innerHTML = '';
+  // 只列出「適用且缺漏」的欄位（排除 null）
+  const missing = REQUIRED_FIELDS.filter(f => found[f.key] === false);
+  const present = REQUIRED_FIELDS.filter(f => found[f.key] === true);
+
+  if (missing.length === 0) {
+    list.innerHTML = '<li style="color:var(--accent2);padding:8px 0;font-size:0.9rem;">✅ 所有適用欄位均已偵測到！</li>';
+  } else {
+    for (const f of missing) {
+      const li = document.createElement('li');
+      li.className = `missing-item severity-${f.severity}`;
+      li.innerHTML = `<span class="icon"></span>
+        <div class="info">
+          <div class="field">缺少：${f.label}</div>
+          <div class="desc">${f.hint}</div>
+        </div>`;
+      list.appendChild(li);
+    }
+  }
+
+  if (present.length) {
+    const okDiv = document.createElement('li');
+    okDiv.style.cssText = 'padding:8px 0;font-size:0.82rem;color:var(--text2);border-top:1px solid var(--border);margin-top:4px;';
+    okDiv.textContent = `✅ 已偵測 ${present.length} 個欄位：${present.map(f => f.label).join('、')}`;
+    list.appendChild(okDiv);
+  }
+}
+
+// ─── Main processing ──────────────────────────────────────────────────────────
+async function processFile(file) {
+  showProgress(true);
+  document.getElementById('results').classList.remove('active');
+
+  const ext = file.name.split('.').pop().toLowerCase();
+  const buffer = await file.arrayBuffer();
+
+  try {
+    setProgress(20, '正在讀取文件結構...');
+    let parsed;
+
+    if (ext === 'xlsx') {
+      parsed = await parseXlsx(buffer);
+    } else if (ext === 'docx') {
+      setProgress(40, '正在解析 Word 文件...');
+      parsed = await parseDocx(buffer);
+    } else if (ext === 'pptx') {
+      setProgress(40, '正在解析 PowerPoint 投影片...');
+      parsed = await parsePptx(buffer);
+    } else if (ext === 'doc' || ext === 'xls' || ext === 'ppt') {
+      alert('請使用新版格式：\n\n.doc → 請另存為 .docx\n.xls → 請另存為 .xlsx\n.ppt → 請另存為 .pptx\n\n（Office 另存新檔 → 選擇對應新版格式）');
+      showProgress(false);
+      return;
+    } else {
+      alert('不支援的檔案格式，請上傳 .xlsx / .docx / .pptx');
+      showProgress(false);
+      return;
+    }
+
+    setProgress(60, '分析欄位完整度...');
+    const flatText = parsed.type === 'xlsx' ? flattenXlsx(parsed)
+                   : parsed.type === 'docx' ? flattenDocx(parsed)
+                   : flattenPptx(parsed);
+
+    setProgress(80, '生成標準化 Markdown...');
+    const docType = detectDocType(flatText, file.name);
+    const found = analyzeFields(flatText, docType, parsed.type);
+    const score = calcScore(found);
+    const md = buildMarkdown(flatText, parsed, file.name, found, docType);
+
+    setProgress(100, '完成！');
+
+    // File info
+    const sizeKb = (file.size / 1024).toFixed(1);
+    document.getElementById('fileInfo').innerHTML = `
+      <span class="file-icon">${fileIcon(ext)}</span>
+      <div>
+        <div class="file-name">${file.name}</div>
+        <div class="file-meta">${ext.toUpperCase()} · ${sizeKb} KB · ${parsed.type === 'xlsx' ? Object.keys(parsed.sheets).length + ' sheets' : parsed.type === 'pptx' ? parsed.slides.length + ' slides' : '1 document'}</div>
+      </div>`;
+
+    // Score
+    const scoreEl = document.getElementById('scoreNum');
+    scoreEl.textContent = score + '%';
+    scoreEl.className = 'score-num ' + (score >= 70 ? 'score-good' : score >= 45 ? 'score-mid' : 'score-bad');
+
+    // 存全域狀態供 plan.md 使用
+    window._lastState = { flatText, fileName: file.name, found, docType };
+
+    renderMissing(found);
+    document.getElementById('mdOutput').value = md;
+    document.getElementById('mdLabel').textContent = `標準化 Markdown · ${file.name.replace(/\.[^.]+$/, '')}.md`;
+
+    setTimeout(() => {
+      showProgress(false);
+      document.getElementById('results').classList.add('active');
+    }, 400);
+
+  } catch (err) {
+    console.error(err);
+    alert('解析失敗：' + err.message);
+    showProgress(false);
+  }
+}
+
+// ─── Actions ──────────────────────────────────────────────────────────────────
+function copyMd() {
+  navigator.clipboard.writeText(document.getElementById('mdOutput').value).then(() => {
+    const t = document.getElementById('copyToast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+  });
+}
+
+function downloadMd() {
+  const text = document.getElementById('mdOutput').value;
+  const label = document.getElementById('mdLabel').textContent;
+  const fileName = label.split('·').pop().trim() || 'spec.md';
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  a.click();
+}
+
+function downloadPlanMd() {
+  const s = window._lastState;
+  if (!s) { alert('請先上傳規格文件'); return; }
+  const text = buildPlanMd(s.flatText, s.fileName, s.found, s.docType);
+  const planName = s.fileName.replace(/\.[^.]+$/, '') + '_plan.md';
+  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = planName;
+  a.click();
+}
+
+// ─── Event listeners ──────────────────────────────────────────────────────────
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+
+// Prevent browser from navigating to dropped file (must be on document level)
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => e.preventDefault());
+
+uploadZone.addEventListener('dragenter', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', e => {
+  // Only remove if leaving the zone itself (not entering a child element)
+  if (!uploadZone.contains(e.relatedTarget)) uploadZone.classList.remove('drag-over');
+});
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) processFile(file);
+});
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  document.getElementById('results').classList.remove('active');
+  fileInput.value = '';
+});
+</script>
+</body>
+</html>
