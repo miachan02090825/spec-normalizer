@@ -450,6 +450,24 @@ function extractValue(flatText, patterns, fallback = '') {
   return fallback;
 }
 
+// ── 多值萃取 helpers ─────────────────────────────────────────────────────────
+function extractAllTables(flatText) {
+  const raw = flatText.match(/\[[\w]+\]\.\[dbo\]\.\[[\w]+\]/g) || [];
+  return [...new Set(raw)];
+}
+function extractAllUrls(flatText) {
+  const raw = flatText.match(/https?:\/\/[^\s一-鿿"'<>)\]]{10,}/g) || [];
+  return [...new Set(raw)].slice(0, 10);
+}
+function extractAllIPs(flatText) {
+  const raw = flatText.match(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?:\\[\w]+)?/g) || [];
+  return [...new Set(raw)];
+}
+function extractToolMenuPath(flatText) {
+  const m = flatText.match(/後端工具選單[^：:\n]*[：:\s>►▶→]+([^\n]{5,120})/);
+  return m ? m[1].trim() : null;
+}
+
 function buildMarkdown(flatText, parsed, fileName, found, docType) {
   const baseName = fileName.replace(/\.[^.]+$/, '');
   const typeLabel = TYPE_LABELS[docType] || '網頁需求規格';
@@ -471,35 +489,33 @@ function buildMarkdown(flatText, parsed, fileName, found, docType) {
   const url = get([/網頁位置[：:\s]/, /路徑[：:\s]/], '⚠️ 未提供');
 
   // Raw content
+  // 參考用 sheet 關鍵字（工具示意、DB欄位定義等，僅供對照，不在製作範圍）
+  const REF_SHEET = /工具示意|DB欄位|其他表|補充|參考|示意圖/i;
+
+  const sheetToMd = (name, rows) => {
+    const validRows = rows.slice(0, 80).filter(r => r.length > 0);
+    if (validRows.length === 0) return null;
+    const maxCols = Math.max(...validRows.map(r => r.length));
+    const pad = r => { const c = [...r]; while (c.length < maxCols) c.push(''); return c; };
+    const header = pad(validRows[0]);
+    const lines = [
+      `| ${header.join(' | ')} |`,
+      `| ${header.map(() => '---').join(' | ')} |`,
+      ...validRows.slice(1).map(r => `| ${pad(r).join(' | ')} |`),
+    ];
+    return `### ${name}\n\n${lines.join('\n')}`;
+  };
+
   let rawContent = '';
   if (parsed.type === 'xlsx') {
-    rawContent = Object.entries(parsed.sheets).map(([name, rows]) => {
-      const validRows = rows.slice(0, 80).filter(r => r.length > 0);
-      if (validRows.length === 0) return null;
+    const mainSheets = Object.entries(parsed.sheets).filter(([n]) => !REF_SHEET.test(n));
+    const refSheets  = Object.entries(parsed.sheets).filter(([n]) =>  REF_SHEET.test(n));
 
-      // 找出最大欄數
-      const maxCols = Math.max(...validRows.map(r => r.length));
+    const mainMd = mainSheets.map(([n, r]) => sheetToMd(n, r)).filter(Boolean).join('\n\n');
+    const refMd  = refSheets .map(([n, r]) => sheetToMd(n, r)).filter(Boolean).join('\n\n');
 
-      // 補齊每列到相同欄數
-      const pad = r => {
-        const cells = [...r];
-        while (cells.length < maxCols) cells.push('');
-        return cells;
-      };
-
-      // 第一列當標頭
-      const header = pad(validRows[0]);
-      const separator = header.map(() => '---');
-      const dataRows = validRows.slice(1).map(pad);
-
-      const lines = [
-        `| ${header.join(' | ')} |`,
-        `| ${separator.join(' | ')} |`,
-        ...dataRows.map(r => `| ${r.join(' | ')} |`),
-      ];
-
-      return `### Sheet：${name}\n\n${lines.join('\n')}`;
-    }).filter(Boolean).join('\n\n');
+    rawContent = mainMd
+      + (refMd ? `\n\n---\n\n> 📎 **以下為參考資料（非本次製作範圍，僅供 AI 對照欄位定義）**\n\n${refMd}` : '');
   } else if (parsed.type === 'pptx') {
     rawContent = parsed.slides.slice(0, 20).map((s, i) =>
       `### 投影片 ${i + 1}\n\n${s}`
@@ -564,12 +580,34 @@ function buildMarkdown(flatText, parsed, fileName, found, docType) {
 | 文案來源 | ${get([/文案[：:\s]/, /copy[：:\s]/i], '⚠️ 未提供')} |
 `;
 
-  // ── Tech section（依類型調整）
-  const dbRow = `| 資料庫位置 | ${get([/資料庫[：:\s]/, /\d{1,3}\.\d{1,3}\.\d{1,3}/], '⚠️ 未提供')} |`;
-  const tableRow = `| 相關資料表 | ${get([/資料表[：:\s]/, /\[dbo\]/], '⚠️ 未提供')} |`;
-  const apiRow = isTool ? '' : `| API / 串接規格 | ${get([/api[：:\s]/, /串接[：:\s]/i], '⚠️ 未提供')} |`;
-  const permRow = `| 工具權限 | ${get([/工具權限[：:\s]/, /權限[：:\s]/], isTool ? '⚠️ 未提供' : '—')} |`;
-  const refRow = `| 參考連結 | ${get([/參考[：:\s]/, /https?:\/\/[^\s]{10,}/], '⚠️ 未提供')} |`;
+  // ── Tech section（多值萃取）
+  const allTables  = extractAllTables(flatText);
+  const allUrls    = extractAllUrls(flatText);
+  const allIPs     = extractAllIPs(flatText);
+  const menuPath   = extractToolMenuPath(flatText);
+  const perm       = get([/工具權限[：:\s]/, /權限[：:\s]/], '⚠️ 未提供');
+  const apiRow     = isTool ? '' : `| API / 串接規格 | ${get([/api[：:\s]/, /串接[：:\s]/i], '⚠️ 未提供')} |`;
+
+  const techSection = `## 🔧 技術規格
+
+${menuPath ? `### 工具放置路徑\n\n${menuPath}\n` : ''}
+### 資料庫位置
+
+${allIPs.length ? allIPs.map(ip => `- \`${ip}\``).join('\n') : '⚠️ 未提供'}
+
+### 相關資料表
+
+${allTables.length ? allTables.map(t => `- \`${t}\``).join('\n') : '⚠️ 未提供'}
+
+### 工具權限
+
+${perm}
+
+### 參考工具連結
+
+${allUrls.length ? allUrls.map(u => `- ${u}`).join('\n') : '⚠️ 未提供'}
+${isTool ? '' : apiRow ? `\n${apiRow}` : ''}
+`;
 
   // ── i18n section（只有活動頁）
   const i18nSection = docType !== 'activity' ? '' : `
@@ -580,38 +618,42 @@ function buildMarkdown(flatText, parsed, fileName, found, docType) {
 ${found.i18n ? '（已偵測到翻譯對照表，請從完整規格區整理後提供給 AI）' : '⚠️ 若有多語系需求，請提供各語系文案對照表（繁中 / 簡中 / 英文 / 其他）'}
 `;
 
-  // ── PM 交付前補充（依類型產生不同預填問題）
+  // ── 本次製作範圍（工具規格：從 sheet 名稱列出）
+  const scopeLines = (() => {
+    if (isTool && parsed.type === 'xlsx') {
+      return Object.keys(parsed.sheets)
+        .filter(s => !/工具示意|DB欄位|其他表|補充/i.test(s))
+        .map(s => `- [x] ${s}`)
+        .join('\n');
+    }
+    return '（本次製作範圍等同文件內容）';
+  })();
+
+  // ── PM 交付前補充（只列出文件裡真的沒有的資訊）
+  // 工具放置目錄、製作範圍、資料表、參考連結已自動萃取，不再要求 PM 填
   const preflightByType = {
     tool: [
-      '**工具放置目錄**：（請填入，例：Slam777 / Slam888 / 新建目錄 SpecTool）',
-      '**本次製作範圍**：（請勾選或說明哪些 Sheet / 功能這次要做，哪些不做）',
-      '**下拉選單 / 勾選欄位的選項值**：（例：vip 0=一般、1=VIP1、2=VIP2；如有多個欄位請逐一列出）',
-      '**資料表對應名稱**：（如規格書有多個遊戲或環境，請確認實際使用的 Table 名稱）',
-      '**操作邏輯**：（新增 ✅ / 編輯 ✅ / 刪除 ✅ / 只查詢，請確認每項工具的 CRUD 範圍）',
-      '**參考工具連結**：（如有可參考的現有工具頁面，請提供網址）',
+      '**下拉 / 勾選欄位的選項值**：規格書未列出具體數值的欄位，請補充（例：vip 0=一般、1=VIP1…）',
+      '**各工具 CRUD 範圍確認**：每項工具各需要 新增 / 編輯 / 刪除 / 只查詢？請逐一確認',
+      '**特殊操作邏輯**：規格書有提到「設定上比較特殊，參考左邊規格」等未詳述的部分，請補充說明',
     ],
     activity: [
-      '**設計稿位置**：（Figma / Zeplin 連結，或美術提供的素材資料夾路徑）',
-      '**本次活動幣 / 道具 ID**：（如有特定活動幣 ID 或道具對應，請列出）',
-      '**活動上下線排程方式**：（由後台控制 / 寫死時間 / 前端判斷）',
-      '**本次製作範圍**：（哪些 Sheet / 功能這次要做，哪些不做）',
-      '**多語系文案確認**：（所有語系文案是否已齊全，請附上翻譯對照表）',
+      '**設計稿位置**：Figma / Zeplin 連結，或美術提供的素材資料夾路徑',
+      '**本次活動幣 / 道具 ID**：如有特定活動幣 ID 或道具對應，請列出',
+      '**活動上下線排程方式**：由後台控制 / 寫死時間 / 前端判斷',
+      '**多語系文案確認**：所有語系文案是否已齊全，請附翻譯對照表',
     ],
     seo: [
-      '**本次修改的頁面 / 網址**：（請列出要修改的具體頁面）',
-      '**目標關鍵字**：（主要關鍵字與長尾關鍵字各為何）',
-      '**Favicon / 圖片素材**：（如需更換圖片，請提供檔案位置）',
+      '**目標關鍵字**：主要關鍵字與長尾關鍵字',
+      '**Favicon / 圖片素材**：如需更換圖片，請提供檔案位置',
     ],
     feature: [
-      '**本次製作範圍**：（哪些流程 / 功能這次要做，哪些暫緩）',
-      '**流程中的待確認邏輯**：（例：序號是否有使用期限、記 IP 的有效時間）',
-      '**跳轉連結 / 外部串接**：（LINE LIFF ID、App Store / Play Store 連結等）',
-      '**無帳號 / 有帳號的不同流程**：（兩種情境的完整流程是否已確認）',
+      '**流程中的待確認邏輯**：例如序號使用期限、記 IP 的有效時間等',
+      '**跳轉連結 / 外部串接**：LINE LIFF ID、App Store / Play Store 連結等',
+      '**無帳號 / 有帳號的不同流程**：兩種情境的完整流程是否已確認',
     ],
     general: [
-      '**工具 / 頁面放置目錄**：（請填入）',
-      '**本次製作範圍**：（如有多個功能，請確認本次範圍）',
-      '**特殊操作邏輯**：（如有規格書未詳述的互動邏輯，請補充）',
+      '**特殊操作邏輯**：如有規格書未詳述的互動邏輯，請補充',
     ],
   };
   const preflightLines = (preflightByType[docType] || preflightByType.general)
@@ -664,15 +706,13 @@ ${rawContent}
 ${uiSection}${designSection}
 ---
 
-## 🔧 技術規格
+## 🗂️ 本次製作範圍
 
-| 項目 | 內容 |
-|------|------|
-${dbRow}
-${tableRow}
-${apiRow}
-${permRow}
-${refRow}
+${scopeLines}
+
+---
+
+${techSection}
 
 ---
 
