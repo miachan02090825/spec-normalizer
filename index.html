@@ -749,157 +749,364 @@ ${openQLines.length ? openQLines.join('\n') : '（無明確待確認項目）'}
 
 // ─── Plan.md 生成 ─────────────────────────────────────────────────────────────
 function buildPlanMd(flatText, fileName, found, docType) {
-  const typeLabel = TYPE_LABELS[docType] || '網頁需求規格';
-  const isTool    = docType === 'tool';
-  const isActivity = docType === 'activity' || docType === 'general';
+  const typeLabel  = TYPE_LABELS[docType] || '網頁需求規格';
+  const isTool     = docType === 'tool';
+  const isActivity = docType === 'activity';
+  const isSeo      = docType === 'seo';
+  const isFeature  = docType === 'feature';
+  const needsApi   = isTool || isFeature;
 
-  const get = (patterns, fallback = '⚠️ 未提供') => extractValue(flatText, patterns, fallback);
+  const get = (patterns, fallback = '⚠️ 待補充') =>
+    extractValue(flatText, patterns, fallback);
 
-  const title       = get([/製作項目[：:\s]/, /需求名稱[：:\s]/, /主標[：:\s]/],
-                          fileName.replace(/\.[^.]+$/, ''));
-  const id          = get([/製作編號[：:\s]/, /需求編號[：:\s]/], '⚠️ 未提供');
-  const owner       = get([/負責[人窗口][：:\s]/, /聯絡人[：:\s]/], '⚠️ 未提供');
-  const deadline    = get([/完成時間[：:\s]/, /截止[：:\s]/], '⚠️ 未提供');
-  const testTime    = get([/測試時間[：:\s]/, /品檢[：:\s]/, /驗證[：:\s]/], '⚠️ 未提供');
-  const launchTime  = get([/上線時間[：:\s]/], '⚠️ 未提供');
-  const offlineTime = isActivity ? get([/下線時間[：:\s]/, /結束時間[：:\s]/], '⚠️ 未提供') : '—';
-  const url         = get([/網頁位置[：:\s]/, /路徑[：:\s]/], '⚠️ 未提供');
-  const ref         = get([/https?:\/\/[^\s]{10,}/], '');
+  const title = get(
+    [/製作項目[：:\s]/, /需求名稱[：:\s]/, /主標[：:\s]/],
+    fileName.replace(/\.[^.]+$/, '')
+  );
+  const id  = get([/製作編號[：:\s]/, /需求編號[：:\s]/], '—');
+  const url = get([/網頁位置[：:\s]/, /路徑[：:\s]/], '—');
+
+  // ── 技術資料萃取
+  const tables   = extractAllTables(flatText);
+  const ips      = extractAllIPs(flatText);
+  const urls     = extractAllUrls(flatText);
+  const menuPath = extractToolMenuPath(flatText);
+
+  // ── 從文件提取功能項目
+  const featureLines = flatText.split('\n')
+    .filter(l => {
+      const t = l.trim();
+      return t.length > 5 && t.length < 120 &&
+        (/^\d+[\.\、]/.test(t) || /功能|頁面|查詢|新增|刪除|修改|匯出|匯入|維護|管理|顯示|統計/.test(t)) &&
+        !/製作編號|需求名稱|上線時間|下線時間|負責|聯絡|版本/.test(t);
+    })
+    .slice(0, 12);
+
+  // ── 推斷模組名稱（路徑佔位用）
+  const rawName   = title.replace(/[【】\[\]《》「」''""（）()、，。\s]/g, '');
+  const shortName = rawName.length > 2 ? rawName.slice(0, 20) : 'Module';
+
+  // ── 待確認問題
+  const openQLines = flatText.split('\n')
+    .filter(l => /待確認|待討論|待補|TBD/.test(l) && l.trim().length > 3)
+    .slice(0, 10);
+
+  // ── 缺漏欄位（用於風險表）
+  const missing = REQUIRED_FIELDS.filter(f => found[f.key] === false);
 
   const now = new Date();
   const dateStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
 
-  // ── 待確認問題
-  const openQLines = flatText.split('\n')
-    .filter(l => /待確認|待討論|待補|TBD/.test(l) && l.trim().length > 2)
-    .slice(0, 15).map(l => `- [ ] ${l.trim()}`);
+  // (old PM-style variables removed — replaced by developer plan sections below)
 
-  // ── 缺漏欄位分級
-  const missing = REQUIRED_FIELDS.filter(f => found[f.key] === false);
-  const missingCritical = missing.filter(f => f.severity === 'critical');
-  const missingWarn     = missing.filter(f => f.severity === 'warn');
-  const missingInfo     = missing.filter(f => f.severity === 'info');
+  // ════════════════════════════════════════════════
+  // 一、功能範圍
+  // ════════════════════════════════════════════════
+  const featureRows = featureLines.length > 0
+    ? featureLines.map((l, i) => `| ${i + 1} | ${l.trim()} | — |`).join('\n')
+    : '| 1 | ⚠️ 請從規格書補充功能清單 | — |';
 
-  const fmtMissing = (list) =>
-    list.length ? list.map(f => `- [ ] **${f.label}**：${f.hint}`).join('\n') : '（無）';
+  // ════════════════════════════════════════════════
+  // 二、資料庫 / 技術規格
+  // ════════════════════════════════════════════════
+  let techSection = '';
+  if (isTool) {
+    const tableRows = tables.length > 0
+      ? tables.map(t => `| \`${t}\` | — | — |`).join('\n')
+      : '| ⚠️ 請補充資料表名稱 | — | — |';
+    const ipRows = ips.length > 0
+      ? ips.map(ip => `| \`${ip}\` | — |`).join('\n')
+      : '| ⚠️ 請補充 DB Server 位置 | — |';
+    techSection = `## 二、資料庫規格
 
-  // ── 工作項目（依類型給不同 checklist）
-  const webTasks = isTool ? [
-    '[ ] 了解資料庫結構與欄位定義',
-    '[ ] 製作後台工具頁面（查詢 / 新增 / 刪除）',
-    '[ ] 實作防呆驗證邏輯',
-    '[ ] 串接資料庫查詢',
-    '[ ] 提交測試環境',
-  ] : docType === 'seo' ? [
-    '[ ] 確認修改範疇（標題 / meta / favicon / 結構化資料）',
-    '[ ] 依清單逐項執行優化',
-    '[ ] 驗證修改結果（Search Console）',
-  ] : [
-    '[ ] 取得設計稿與素材',
-    '[ ] 確認版型（直版 / 橫版）與尺寸',
-    '[ ] 製作活動頁面 HTML / CSS / JS',
-    '[ ] 串接活動邏輯 / API',
-    '[ ] 設定活動上線 / 下線排程',
-    '[ ] 提交測試環境',
-  ];
+### 相關資料表
 
-  const designTasks = isTool ? ['—（後台工具通常不需設計稿）'] : [
-    '[ ] 提供主視覺設計稿',
-    '[ ] 提供切圖素材 / 動態檔案',
-    '[ ] 提供所有語系文案',
-  ];
+| 資料表 | 說明 | 備註 |
+|--------|------|------|
+${tableRows}
 
-  // ── 時程表（有下線時間才加）
-  const milestones = [
-    `| 規格確認完成   | PM         | ${deadline}    | ⬜ |`,
-    `| 設計稿提供     | 設計組     | ⚠️ 未提供      | ⬜ |`,
-    `| 開發完成       | 網頁組     | ${deadline}    | ⬜ |`,
-    `| QA / 企劃驗證  | 品檢 / 企劃| ${testTime}    | ⬜ |`,
-    `| 正式上線       | 網頁組     | ${launchTime}  | ⬜ |`,
-    isActivity ? `| 活動下線       | 網頁組     | ${offlineTime} | ⬜ |` : null,
-  ].filter(Boolean);
+### DB Server
 
-  return `# ${title} — 計畫導向規格書
-
-> 版本：v1.0　｜　建立時間：${dateStr}　｜　文件類型：${typeLabel}
-> 原始檔案：\`${fileName}\`
-
----
-
-## 📌 專案概覽
-
-| 欄位 | 內容 |
+| 位置 | 用途 |
 |------|------|
-| 製作編號 | ${id} |
-| 需求名稱 | ${title} |
-| 需求類型 | ${typeLabel} |
-| 提出單位 / 窗口 | ${owner} |
-| 網頁位置 / 模組 | ${url} |
-${ref ? `| 參考連結 | ${ref} |` : ''}
+${ipRows}
+${menuPath ? `\n### 後台工具路徑\n\n\`${menuPath}\`` : ''}
+`;
+  } else if (needsApi || isActivity) {
+    const apiRows = urls.length > 0
+      ? urls.slice(0, 5).map(u => `| \`${u}\` | — |`).join('\n')
+      : '| ⚠️ 請補充 API / 資源端點 | — |';
+    techSection = `## 二、外部資源 / API
+
+| 端點 / URL | 說明 |
+|-----------|------|
+${apiRows}
+`;
+  } else if (isSeo) {
+    techSection = `## 二、SEO 修改範疇
+
+| 項目 | 目標頁面 / 說明 |
+|------|----------------|
+| meta title / description | ⚠️ 請補充目標頁面清單 |
+| 結構化資料（Schema.org） | — |
+| sitemap / robots.txt | — |
+| 內部連結優化 | — |
+`;
+  }
+
+  // ════════════════════════════════════════════════
+  // 三、新增 / 修改檔案清單
+  // ════════════════════════════════════════════════
+  let fileSection = '';
+  if (isTool) {
+    fileSection = `## 三、新增 / 修改檔案清單
+
+| 類型 | 路徑 | 說明 |
+|------|------|------|
+| Controller | \`Controllers/⚠️確認目錄/${shortName}Controller.cs\` | API 端點定義 |
+| Repository | \`Repositories/${shortName}Repository.cs\` | DB 存取層（SQL 封裝） |
+| Service | \`Services/${shortName}Service.cs\` | 商業邏輯（視複雜度決定是否拆出） |
+| Request DTO | \`Models/DTOs/${shortName}Request.cs\` | 查詢 / 寫入請求格式 |
+| Response DTO | \`Models/DTOs/${shortName}Response.cs\` | 回傳格式 |
+| Entity | \`Models/Entities/⚠️依資料表名稱補充.cs\` | DB 對應 Entity（若尚未存在則新增） |
+
+> ⚠️ 路徑前綴請依專案實際目錄結構調整。
+`;
+  } else if (isFeature) {
+    fileSection = `## 三、新增 / 修改檔案清單
+
+| 類型 | 路徑 | 說明 |
+|------|------|------|
+| Controller（若有後端） | \`Controllers/⚠️確認目錄/${shortName}Controller.cs\` | API 端點 |
+| 前端頁面 | \`⚠️確認路徑/${shortName}/index.html\` | 主頁面 |
+| 前端 JS | \`⚠️確認路徑/${shortName}/main.js\` | 互動邏輯 |
+| 前端 CSS | \`⚠️確認路徑/${shortName}/style.css\` | 樣式 |
+`;
+  } else if (isActivity) {
+    fileSection = `## 三、新增 / 修改檔案清單
+
+| 類型 | 路徑 | 說明 |
+|------|------|------|
+| 活動頁面 | \`⚠️確認路徑/${shortName}/index.html\` | 活動主頁面 |
+| 活動 JS | \`⚠️確認路徑/${shortName}/main.js\` | 互動 / 抽獎邏輯 |
+| 活動 CSS | \`⚠️確認路徑/${shortName}/style.css\` | 活動樣式 |
+| 上下線排程 | — | 請確認是否需後端排程或 toggle 開關 |
+`;
+  } else if (isSeo) {
+    fileSection = `## 三、修改範疇檔案
+
+| 頁面 / 檔案 | 修改項目 | 說明 |
+|------------|---------|------|
+| ⚠️ 請補充目標頁面 | meta / title / OG | — |
+`;
+  } else {
+    fileSection = `## 三、新增 / 修改檔案清單
+
+| 類型 | 路徑 | 說明 |
+|------|------|------|
+| ⚠️ 請依規格補充 | — | — |
+`;
+  }
+
+  // ════════════════════════════════════════════════
+  // 四、端點規格（tool / feature 才有）
+  // ════════════════════════════════════════════════
+  let routeSection = '';
+  if (needsApi) {
+    const routeName = shortName.toLowerCase().replace(/[^a-z0-9一-鿿]/g, '-');
+    routeSection = `## 四、端點規格
+
+| Method | Route | 功能說明 | 所需權限 |
+|--------|-------|---------|---------|
+| GET | \`/api/⚠️確認前綴/${routeName}\` | 查詢列表 | ⚠️ 待補 |
+| GET | \`/api/⚠️確認前綴/${routeName}/{id}\` | 查詢單筆 | ⚠️ 待補 |
+| POST | \`/api/⚠️確認前綴/${routeName}\` | 新增 | ⚠️ 待補 |
+| PUT | \`/api/⚠️確認前綴/${routeName}/{id}\` | 更新 | ⚠️ 待補 |
+| DELETE | \`/api/⚠️確認前綴/${routeName}/{id}\` | 刪除 | ⚠️ 待補 |
+
+> ⚠️ 路由前綴與權限名稱請依專案慣例確認後填入。
+
+`;
+  }
+
+  // ════════════════════════════════════════════════
+  // 五（或四）、實作 Checklist
+  // ════════════════════════════════════════════════
+  let phase1Items, phase2Items;
+
+  if (isTool) {
+    phase1Items = [
+      `確認 DB 連線字串與 DbContext${ips.length > 0 ? '（' + ips[0] + '）' : '（⚠️ IP 待補）'}`,
+      tables.length > 0
+        ? '確認 Entity 是否已存在：' + tables.slice(0, 3).join('、') + (tables.length > 3 ? '…' : '')
+        : '補充資料表 Entity（需先取得 DB 欄位規格）',
+      '確認 Controller 放置目錄與路由前綴',
+      '確認所需權限名稱（向後端 / DB 負責人確認）',
+    ];
+    phase2Items = [
+      '建立 Entity（若尚未存在）',
+      '建立 Repository — 實作查詢 / 寫入 / 刪除 SQL',
+      '建立 Request / Response DTO',
+      '建立 Controller — 實作 GET / POST / PUT / DELETE 端點',
+      '加入 DI 注冊（Startup.cs 或 Program.cs）',
+      '加入權限驗證（依確認的權限名稱）',
+    ];
+  } else if (isActivity) {
+    phase1Items = [
+      '確認設計稿與切圖素材已齊全',
+      '確認活動版型（直版 / 橫版）與尺寸規格',
+      urls.length > 0 ? '確認 API 端點可用：' + urls[0] : '確認活動所需 API 端點',
+      '確認活動上線 / 下線時間與排程方式',
+    ];
+    phase2Items = [
+      '製作活動頁面 HTML 結構（依設計稿）',
+      '實作 CSS 樣式（含 RWD / 多語系）',
+      '實作活動邏輯 JS（互動 / 抽獎 / 倒數等）',
+      '串接 API 資料',
+      '設定上線 / 下線排程或開關',
+    ];
+  } else if (isSeo) {
+    phase1Items = [
+      '取得目標頁面清單與優化關鍵字',
+      '確認修改範疇（title / meta / OG / 結構化資料 / 內部連結）',
+      '備份現有 meta 設定',
+    ];
+    phase2Items = [
+      '逐頁修改 meta title / description',
+      '更新 OG tags（og:title / og:description / og:image）',
+      '加入 / 修正結構化資料（Schema.org JSON-LD）',
+      '更新 sitemap.xml',
+      '調整內部連結結構',
+    ];
+  } else {
+    phase1Items = [
+      '確認頁面路徑與部署目標環境',
+      '確認設計稿與素材是否齊全',
+      urls.length > 0 ? '確認 API 端點可用：' + urls[0] : '確認所需 API 端點',
+    ];
+    phase2Items = [
+      '製作頁面 HTML 結構',
+      '實作 CSS 樣式（含 RWD）',
+      '串接 API / 資料邏輯',
+      '實作互動 JS',
+    ];
+  }
+
+  const phase3Items = [
+    '功能自測（Happy path + 邊界條件）',
+    '部署至測試環境',
+    '提交企劃 / QA 驗收',
+    '修正回報問題',
+  ];
+  const phase4Items = [
+    '部署至正式環境',
+    '確認正式環境功能正常',
+    isTool
+      ? '確認舊站同類功能可停用 / 關閉'
+      : isActivity
+        ? '確認活動上線 / 下線排程正確'
+        : isSeo
+          ? '以 Search Console 驗證修改結果'
+          : '確認上線後頁面運作正常',
+  ];
+
+  const fmtPhase = items => items.map(t => `- [ ] ${t}`).join('\n');
+
+  // ── 章節編號
+  const secChecklist = needsApi ? '五' : '四';
+  const secRisk      = needsApi ? '六' : '五';
+  const secOpenQ     = needsApi ? '七' : '六';
+  const secDeps      = needsApi ? '八' : '七';
+
+  // ════════════════════════════════════════════════
+  // 風險與注意事項
+  // ════════════════════════════════════════════════
+  const risks = [];
+  if (missing.some(f => f.key === 'db') && isTool)
+    risks.push(['資料庫規格缺漏', '無法確認資料表與欄位定義', '高', '向提出單位索取 DB 欄位規格']);
+  if (missing.some(f => f.key === 'api') && needsApi)
+    risks.push(['API 規格未定義', '串接方向不明，可能需反覆修改', '高', '確認後端 API 文件或端點']);
+  if (missing.some(f => f.key === 'ui') && !isTool)
+    risks.push(['UI 設計稿未提供', '前端實作可能需大量返工', '中', '向設計組索取設計稿及切圖']);
+  if (ips.length === 0 && isTool)
+    risks.push(['DB Server 未標示', '無法確認測試 / 正式連線環境', '中', '向提出單位確認 DB IP 與環境']);
+  if (openQLines.length > 0)
+    risks.push(['規格書含待確認項目', `共 ${openQLines.length} 項 TBD（見下方）`, '中', '開工前逐一確認清除']);
+  risks.push(['測試 / 正式環境差異', 'DB 連線、API base URL 可能不同', '低', '部署前確認各環境 config']);
+
+  const riskRows = risks.map(r => `| ${r[0]} | ${r[1]} | ${r[2]} | ${r[3]} |`).join('\n');
+
+  // ════════════════════════════════════════════════
+  // 相依檔案索引
+  // ════════════════════════════════════════════════
+  const depRows = [
+    menuPath ? `| 後台工具路徑 | \`${menuPath}\` |` : null,
+    url !== '—'       ? `| 網頁位置 | ${url} |`                           : null,
+    tables.length > 0 ? `| 相關資料表 | ${tables.join('、')} |`           : null,
+    urls.length > 0   ? `| 參考連結 | ${urls.slice(0, 3).join(' / ')} |` : null,
+    `| 原始規格檔 | \`${fileName}\` |`,
+  ].filter(Boolean).join('\n');
+
+  // ════════════════════════════════════════════════
+  // 組合輸出
+  // ════════════════════════════════════════════════
+  return `# ${title} — 技術實作計畫
+
+> 製作編號：${id}　｜　建立時間：${dateStr}　｜　文件類型：${typeLabel}
+> 原始規格：\`${fileName}\`
 
 ---
 
-## 📅 時程里程碑
+## 一、功能範圍
 
-| 里程碑 | 負責單位 | 預計時間 | 狀態 |
-|--------|---------|---------|------|
-${milestones.join('\n')}
-
----
-
-## 🗂️ 工作項目拆解
-
-### 📋 PM（規格確認與驗收）
-- [ ] 確認規格書完整性
-- [ ] 向各單位索取缺漏資訊（見下方清單）
-- [ ] 確認設計稿與素材齊全
-- [ ] 於測試期間進行驗收
-- [ ] 確認上線結果
-
-### 💻 網頁組
-${webTasks.map(t => `- ${t}`).join('\n')}
-
-### 🎨 設計組
-${designTasks.map(t => `- ${t}`).join('\n')}
-
-### 🔍 品檢 / QA
-- [ ] 功能逐項驗證（依核心需求清單）
-- [ ] 跨裝置 / 瀏覽器測試
-- [ ] 回報問題並追蹤修正
+| # | 功能 / 頁面 | 備註 |
+|---|-----------|------|
+${featureRows}
 
 ---
 
-## ⚠️ 需向各單位補充的資訊
+${techSection ? techSection + '\n---\n\n' : ''}${fileSection}
+---
 
-### 🔴 必須補齊（影響開發無法進行）
-${fmtMissing(missingCritical)}
+${routeSection ? routeSection + '---\n\n' : ''}## ${secChecklist}、實作 Checklist
 
-### 🟡 建議補充（影響品質）
-${fmtMissing(missingWarn)}
+### Phase 1 — 環境確認 / 前置作業
+${fmtPhase(phase1Items)}
 
-### 🔵 有提供更好（補充資訊）
-${fmtMissing(missingInfo)}
+### Phase 2 — 核心功能實作
+${fmtPhase(phase2Items)}
+
+### Phase 3 — 測試與驗收
+${fmtPhase(phase3Items)}
+
+### Phase 4 — 上線
+${fmtPhase(phase4Items)}
 
 ---
 
-## ❓ 待確認問題清單
+## ${secRisk}、風險與注意事項
 
-${openQLines.length ? openQLines.join('\n') : '（文件中無明確待確認項目）'}
-
----
-
-## ✅ 驗收標準
-
-${found.accept ? '（請從原始文件補充驗收條件）' : '⚠️ **缺漏** — 請向提出單位確認：功能完成的具體條件？由誰驗收？'}
+| 風險項目 | 說明 | 影響程度 | 對應措施 |
+|---------|------|---------|---------|
+${riskRows}
 
 ---
 
-## 📎 備註
+## ${secOpenQ}、待確認問題
 
-（其他補充說明）
+${openQLines.length > 0 ? openQLines.map(l => `- [ ] ${l.trim()}`).join('\n') : '（文件中無明確待確認項目）'}
 
 ---
-*此計畫書由「規格文件標準化工具」自動生成，PM 請確認後分發給各相關單位。*
+
+## ${secDeps}、相依檔案索引
+
+| 項目 | 位置 / 說明 |
+|------|-----------|
+${depRows}
+
+---
+
+*此計畫書由「規格文件標準化工具」自動生成，開發人員請依實際專案結構調整路徑與名稱。*
 `;
 }
 
