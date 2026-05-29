@@ -356,7 +356,12 @@ function fileIcon(ext) {
 async function parseXlsx(buffer) {
   const wb = XLSX.read(buffer, { type: 'array' });
   const sheets = {};
-  for (const name of wb.SheetNames) {
+  for (let i = 0; i < wb.SheetNames.length; i++) {
+    const name = wb.SheetNames[i];
+    // 跳過隱藏 sheet（Hidden: 1=hidden, 2=veryHidden）
+    const visibility = wb.Workbook && wb.Workbook.Sheets && wb.Workbook.Sheets[i]
+      ? wb.Workbook.Sheets[i].Hidden : 0;
+    if (visibility) continue;
     const ws = wb.Sheets[name];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     sheets[name] = rows.map(r => r.map(c => String(c).trim()).filter(Boolean));
