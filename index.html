@@ -197,6 +197,72 @@ body {
 @media (max-width: 768px) {
   .results.active { grid-template-columns: 1fr; }
 }
+
+/* ── AI 實作區 ── */
+.ai-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  margin-top: 20px;
+}
+.ai-header { margin-bottom: 18px; }
+.ai-title {
+  font-size: 1.05rem; font-weight: 700;
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  margin-bottom: 4px;
+}
+.ai-subtitle { color: var(--text2); font-size: 0.85rem; }
+.api-key-row { display: flex; gap: 10px; margin-bottom: 6px; }
+.api-key-row input {
+  flex: 1;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 14px;
+  color: var(--text); font-size: 0.9rem; font-family: monospace;
+}
+.api-key-row input:focus { outline: none; border-color: var(--accent); }
+.api-key-hint { color: var(--text3); font-size: 0.78rem; margin-bottom: 16px; }
+.ai-model-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 16px; font-size: 0.85rem; color: var(--text2);
+}
+.ai-model-row select {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px;
+  color: var(--text); font-size: 0.85rem; cursor: pointer;
+}
+.ai-output-wrap {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; overflow: hidden; margin-top: 16px;
+}
+.ai-output-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  font-size: 0.85rem; color: var(--text2); background: var(--surface2);
+}
+.ai-status-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--accent2);
+  margin-right: 8px; animation: pulse 1s infinite;
+}
+.ai-status-dot.done { background: var(--accent2); animation: none; }
+.ai-status-dot.idle { display: none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+.ai-output-pre {
+  padding: 16px; font-size: 0.82rem; font-family: 'Consolas', monospace;
+  color: var(--text); white-space: pre-wrap; word-break: break-all;
+  max-height: 520px; overflow-y: auto; margin: 0;
+  line-height: 1.55;
+}
+.btn-orange {
+  background: linear-gradient(135deg, #f7971e, #ffd200);
+  color: #1a1a1a; border: none; border-radius: 8px;
+  padding: 10px 20px; font-weight: 700; font-size: 0.9rem;
+  cursor: pointer; transition: opacity 0.2s; white-space: nowrap;
+}
+.btn-orange:hover { opacity: 0.88; }
+.btn-orange:disabled { opacity: 0.4; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -262,6 +328,36 @@ body {
       </div>
       <textarea class="md-output" id="mdOutput" spellcheck="false"></textarea>
     </div>
+  </div>
+</div>
+
+<!-- ── AI 自動實作區 ───────────────────────────────────────── -->
+<div class="ai-section" id="aiSection" style="display:none;">
+  <div class="ai-header">
+    <div class="ai-title">🤖 AI 自動實作</div>
+    <div class="ai-subtitle">依照上方規格，讓 Claude 直接生成程式碼，打包 ZIP 下載</div>
+  </div>
+
+  <div class="api-key-row">
+    <input type="password" id="apiKeyInput" placeholder="貼入你的 Anthropic API Key（sk-ant-api03-...）" autocomplete="off" />
+    <button class="btn-orange" id="runAiBtn" onclick="runAiImplementation()">🚀 開始實作</button>
+  </div>
+  <div class="api-key-hint">🔒 API Key 僅存於你的瀏覽器（localStorage），不會送至任何第三方伺服器</div>
+
+  <div class="ai-model-row">
+    <span>使用模型：</span>
+    <select id="modelSelect">
+      <option value="claude-sonnet-4-5">claude-sonnet-4-5（快速，推薦）</option>
+      <option value="claude-opus-4-5">claude-opus-4-5（更強，較慢）</option>
+    </select>
+  </div>
+
+  <div class="ai-output-wrap" id="aiOutputWrap" style="display:none;">
+    <div class="ai-output-toolbar">
+      <span><span class="ai-status-dot idle" id="aiDot"></span><span id="aiStatusText">準備中</span></span>
+      <button class="btn btn-success" id="downloadZipBtn" onclick="downloadGeneratedZip()" style="display:none;">⬇ 下載程式碼 ZIP</button>
+    </div>
+    <pre class="ai-output-pre" id="aiOutputPre"></pre>
   </div>
 </div>
 
@@ -1211,8 +1307,20 @@ async function processFile(file) {
     scoreEl.textContent = score + '%';
     scoreEl.className = 'score-num ' + (score >= 70 ? 'score-good' : score >= 45 ? 'score-mid' : 'score-bad');
 
-    // 存全域狀態供 plan.md 使用
-    window._lastState = { flatText, fileName: file.name, found, docType };
+    // 存全域狀態供 plan.md 與 AI 實作使用
+    window._lastState = { flatText, fileName: file.name, found, docType, specMd: md };
+
+    // 顯示 AI 實作區
+    const aiSection = document.getElementById('aiSection');
+    aiSection.style.display = 'block';
+    // 載入已儲存的 API Key
+    const savedKey = localStorage.getItem('anthropic_api_key');
+    if (savedKey) document.getElementById('apiKeyInput').value = savedKey;
+    // 重設輸出區
+    document.getElementById('aiOutputWrap').style.display = 'none';
+    document.getElementById('downloadZipBtn').style.display = 'none';
+    document.getElementById('aiOutputPre').textContent = '';
+    window._generatedCode = '';
 
     renderMissing(found);
     document.getElementById('mdOutput').value = md;
@@ -1260,6 +1368,159 @@ function downloadPlanMd() {
   a.href = URL.createObjectURL(blob);
   a.download = planName;
   a.click();
+}
+
+// ─── AI 自動實作 ──────────────────────────────────────────────────────────────
+
+async function runAiImplementation() {
+  const state = window._lastState;
+  if (!state) { alert('請先上傳規格文件'); return; }
+
+  const apiKey = document.getElementById('apiKeyInput').value.trim();
+  if (!apiKey) { alert('請輸入 Anthropic API Key'); return; }
+  localStorage.setItem('anthropic_api_key', apiKey);
+
+  const model = document.getElementById('modelSelect').value;
+  const btn   = document.getElementById('runAiBtn');
+  const dot   = document.getElementById('aiDot');
+  const statusEl = document.getElementById('aiStatusText');
+  const pre   = document.getElementById('aiOutputPre');
+  const wrap  = document.getElementById('aiOutputWrap');
+  const dlBtn = document.getElementById('downloadZipBtn');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中...';
+  wrap.style.display = 'block';
+  dlBtn.style.display = 'none';
+  pre.textContent = '';
+  window._generatedCode = '';
+  dot.className = 'ai-status-dot';
+  statusEl.textContent = '連線中...';
+
+  // ── 組合 prompt ──────────────────────────────────────
+  const planMd    = buildPlanMd(state.flatText, state.fileName, state.found, state.docType);
+  const specMd    = state.specMd || '';
+  const isTool    = state.docType === 'tool';
+  const isActivity = state.docType === 'activity';
+
+  const systemPrompt = `你是一個資深全端工程師，專門實作後台工具（C# ASP.NET Core）與前台活動頁面（HTML/CSS/JS）。
+
+依照使用者提供的 spec.md 與 plan.md 實作完整程式碼。
+
+【輸出格式規則 — 必須嚴格遵守】
+1. 每個檔案用獨立程式碼區塊，語言標記後空一格接相對路徑：
+   \`\`\`csharp Controllers/Tool/ExampleController.cs
+   （程式碼內容）
+   \`\`\`
+2. 程式碼必須完整可執行，禁止使用 // ...省略 或 TODO 代替實際邏輯
+3. 路徑有 ⚠️確認目錄 的地方，用最合理的預設值代入
+4. 後台工具（tool）：輸出 Controller + Repository + Request DTO + Response DTO
+5. 活動頁面（activity）：輸出一個完整 index.html（CSS 與 JS 直接內嵌其中）
+6. SEO 需求：輸出 changes.md 列出所有要修改的檔案與內容
+7. 每段程式碼前可加一行中文說明，其餘不需要解釋文字`;
+
+  const userPrompt = `# spec.md（規格書）\n\n${specMd}\n\n---\n\n# plan.md（技術實作計畫）\n\n${planMd}`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 16000,
+        stream: true,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error((err.error && err.error.message) || `HTTP ${resp.status}`);
+    }
+
+    statusEl.textContent = '生成中...';
+    const reader  = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText  = '';
+    let buf       = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop(); // 保留未完成行
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (raw === '[DONE]') continue;
+        try {
+          const evt = JSON.parse(raw);
+          if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+            fullText += evt.delta.text;
+            pre.textContent = fullText;
+            pre.scrollTop = pre.scrollHeight;
+          }
+        } catch (_) {}
+      }
+    }
+
+    window._generatedCode = fullText;
+    dot.className  = 'ai-status-dot done';
+    statusEl.textContent = '✅ 生成完成';
+    dlBtn.style.display = 'block';
+
+  } catch (err) {
+    dot.className  = 'ai-status-dot done';
+    dot.style.background = 'var(--bad)';
+    statusEl.textContent = '❌ 錯誤：' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚀 重新實作';
+  }
+}
+
+async function downloadGeneratedZip() {
+  const text = window._generatedCode || '';
+  if (!text) return;
+
+  const zip = new JSZip();
+
+  // 解析程式碼區塊：```lang 路徑/檔名.ext
+  const regex = /```[\w#+\-]*[ \t]+([^\n]+)\n([\s\S]*?)```/g;
+  let match;
+  let count = 0;
+
+  while ((match = regex.exec(text)) !== null) {
+    const rawPath = match[1].trim();
+    const content = match[2];
+    // 過濾掉不像路徑的行（純語言名稱如 "csharp"）
+    if (!rawPath.includes('.') && !rawPath.includes('/')) continue;
+    zip.file(rawPath, content);
+    count++;
+  }
+
+  if (count === 0) {
+    // 沒有帶路徑的程式碼區塊 → 全部存成 generated.md
+    zip.file('generated.md', text);
+  }
+
+  const state = window._lastState;
+  const baseName = state ? state.fileName.replace(/\.[^.]+$/, '') : 'output';
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = baseName + '_generated.zip';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
 }
 
 // ─── Event listeners ──────────────────────────────────────────────────────────
