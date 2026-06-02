@@ -214,27 +214,61 @@ body {
   margin-bottom: 4px;
 }
 .ai-subtitle { color: var(--text2); font-size: 0.85rem; }
+
+/* 兩欄選項 */
+.ai-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+@media (max-width: 640px) { .ai-options { grid-template-columns: 1fr; } }
+.ai-option {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px 20px;
+}
+.ai-option-badge {
+  display: inline-block; font-size: 0.72rem; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px; margin-bottom: 8px; letter-spacing: .04em;
+}
+.badge-free { background: rgba(0,201,167,.15); color: var(--accent2); border: 1px solid rgba(0,201,167,.3); }
+.badge-api  { background: rgba(108,99,255,.15); color: var(--accent);  border: 1px solid rgba(108,99,255,.3); }
+.ai-option h4 { font-size: 0.95rem; margin-bottom: 6px; }
+.ai-option p  { font-size: 0.8rem; color: var(--text2); margin-bottom: 14px; line-height: 1.5; }
+
+/* 複製成功提示 */
+.prompt-copied {
+  display: none; align-items: center; gap: 8px;
+  background: rgba(0,201,167,.1); border: 1px solid rgba(0,201,167,.3);
+  border-radius: 8px; padding: 10px 14px;
+  font-size: 0.85rem; color: var(--accent2); margin-top: 12px;
+}
+.prompt-copied.show { display: flex; }
+.prompt-copied .ai-links { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.prompt-copied .ai-link {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; font-size: 0.78rem;
+  color: var(--text); text-decoration: none; cursor: pointer;
+  transition: border-color .2s;
+}
+.prompt-copied .ai-link:hover { border-color: var(--accent2); color: var(--accent2); }
+
+/* API Key 欄 */
 .api-key-row { display: flex; gap: 10px; margin-bottom: 6px; }
 .api-key-row input {
-  flex: 1;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 8px; padding: 10px 14px;
-  color: var(--text); font-size: 0.9rem; font-family: monospace;
+  flex: 1; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 9px 14px;
+  color: var(--text); font-size: 0.88rem; font-family: monospace;
 }
 .api-key-row input:focus { outline: none; border-color: var(--accent); }
-.api-key-hint { color: var(--text3); font-size: 0.78rem; margin-bottom: 16px; }
+.api-key-hint { color: var(--text3); font-size: 0.76rem; margin-bottom: 10px; }
 .ai-model-row {
   display: flex; align-items: center; gap: 10px;
-  margin-bottom: 16px; font-size: 0.85rem; color: var(--text2);
+  font-size: 0.84rem; color: var(--text2);
 }
 .ai-model-row select {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 6px; padding: 6px 10px;
-  color: var(--text); font-size: 0.85rem; cursor: pointer;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 5px 10px;
+  color: var(--text); font-size: 0.84rem; cursor: pointer;
 }
 .ai-output-wrap {
   background: var(--bg); border: 1px solid var(--border);
-  border-radius: 8px; overflow: hidden; margin-top: 16px;
+  border-radius: 8px; overflow: hidden; margin-top: 14px;
 }
 .ai-output-toolbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -246,23 +280,28 @@ body {
   border-radius: 50%; background: var(--accent2);
   margin-right: 8px; animation: pulse 1s infinite;
 }
-.ai-status-dot.done { background: var(--accent2); animation: none; }
+.ai-status-dot.done { animation: none; }
 .ai-status-dot.idle { display: none; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
 .ai-output-pre {
   padding: 16px; font-size: 0.82rem; font-family: 'Consolas', monospace;
   color: var(--text); white-space: pre-wrap; word-break: break-all;
-  max-height: 520px; overflow-y: auto; margin: 0;
-  line-height: 1.55;
+  max-height: 520px; overflow-y: auto; margin: 0; line-height: 1.55;
 }
 .btn-orange {
   background: linear-gradient(135deg, #f7971e, #ffd200);
   color: #1a1a1a; border: none; border-radius: 8px;
-  padding: 10px 20px; font-weight: 700; font-size: 0.9rem;
+  padding: 9px 18px; font-weight: 700; font-size: 0.88rem;
   cursor: pointer; transition: opacity 0.2s; white-space: nowrap;
 }
 .btn-orange:hover { opacity: 0.88; }
 .btn-orange:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-green {
+  background: var(--accent2); color: #000; border: none; border-radius: 8px;
+  padding: 9px 18px; font-weight: 700; font-size: 0.88rem;
+  cursor: pointer; transition: opacity 0.2s; white-space: nowrap;
+}
+.btn-green:hover { opacity: 0.85; }
 </style>
 </head>
 <body>
@@ -335,23 +374,50 @@ body {
 <div class="ai-section" id="aiSection" style="display:none;">
   <div class="ai-header">
     <div class="ai-title">🤖 AI 自動實作</div>
-    <div class="ai-subtitle">依照上方規格，讓 Claude 直接生成程式碼，打包 ZIP 下載</div>
+    <div class="ai-subtitle">選擇你的方式，讓 AI 依照規格書生成程式碼</div>
   </div>
 
-  <div class="api-key-row">
-    <input type="password" id="apiKeyInput" placeholder="貼入你的 Anthropic API Key（sk-ant-api03-...）" autocomplete="off" />
-    <button class="btn-orange" id="runAiBtn" onclick="runAiImplementation()">🚀 開始實作</button>
-  </div>
-  <div class="api-key-hint">🔒 API Key 僅存於你的瀏覽器（localStorage），不會送至任何第三方伺服器</div>
+  <div class="ai-options">
 
-  <div class="ai-model-row">
-    <span>使用模型：</span>
-    <select id="modelSelect">
-      <option value="claude-sonnet-4-5">claude-sonnet-4-5（快速，推薦）</option>
-      <option value="claude-opus-4-5">claude-opus-4-5（更強，較慢）</option>
-    </select>
-  </div>
+    <!-- 選項一：免費複製 Prompt -->
+    <div class="ai-option">
+      <div class="ai-option-badge badge-free">✅ 免費・無需帳號</div>
+      <h4>📋 複製 Prompt</h4>
+      <p>一鍵複製完整實作指令（規格 + 技術計畫），貼到任何 AI 即可：ChatGPT、Copilot、Gemini…</p>
+      <button class="btn-green" onclick="copyFullPrompt()">📋 複製完整 Prompt</button>
+      <div class="prompt-copied" id="promptCopied">
+        ✅ 已複製！貼到 →
+        <div class="ai-links">
+          <a class="ai-link" href="https://chat.openai.com" target="_blank">ChatGPT</a>
+          <a class="ai-link" href="https://gemini.google.com" target="_blank">Gemini</a>
+          <a class="ai-link" href="https://copilot.microsoft.com" target="_blank">Copilot</a>
+          <a class="ai-link" href="https://claude.ai" target="_blank">Claude.ai</a>
+        </div>
+      </div>
+    </div>
 
+    <!-- 選項二：API Key 直接生成 -->
+    <div class="ai-option">
+      <div class="ai-option-badge badge-api">⚡ 進階・需 API Key</div>
+      <h4>🚀 直接生成 ZIP</h4>
+      <p>貼入 Anthropic API Key，AI 直接在此頁生成程式碼並打包成 ZIP 下載。</p>
+      <div class="api-key-row">
+        <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off" />
+        <button class="btn-orange" id="runAiBtn" onclick="runAiImplementation()">🚀 實作</button>
+      </div>
+      <div class="api-key-hint">🔒 Key 僅存你的瀏覽器，不送任何第三方</div>
+      <div class="ai-model-row">
+        <span>模型：</span>
+        <select id="modelSelect">
+          <option value="claude-sonnet-4-5">Sonnet（快速）</option>
+          <option value="claude-opus-4-5">Opus（更強）</option>
+        </select>
+      </div>
+    </div>
+
+  </div><!-- /.ai-options -->
+
+  <!-- 串流輸出（API Key 模式） -->
   <div class="ai-output-wrap" id="aiOutputWrap" style="display:none;">
     <div class="ai-output-toolbar">
       <span><span class="ai-status-dot idle" id="aiDot"></span><span id="aiStatusText">準備中</span></span>
@@ -1371,6 +1437,77 @@ function downloadPlanMd() {
 }
 
 // ─── AI 自動實作 ──────────────────────────────────────────────────────────────
+
+function copyFullPrompt() {
+  const state = window._lastState;
+  if (!state) { alert('請先上傳規格文件'); return; }
+
+  const specMd = state.specMd || '';
+  const planMd = buildPlanMd(state.flatText, state.fileName, state.found, state.docType);
+  const isTool     = state.docType === 'tool';
+  const isActivity = state.docType === 'activity';
+  const isSeo      = state.docType === 'seo';
+
+  const instruction = isTool
+    ? `你是一個資深後端工程師（C# ASP.NET Core）。
+請依照下方 spec.md 與 plan.md 實作完整程式碼。
+
+【輸出規則】
+1. 每個檔案用獨立程式碼區塊，語言標記後接相對路徑：
+   \`\`\`csharp Controllers/Tool/ExampleController.cs
+   （完整程式碼）
+   \`\`\`
+2. 必須輸出：Controller、Repository、Request DTO、Response DTO
+3. 程式碼完整可執行，禁止省略
+4. 路徑含 ⚠️ 的用合理預設值代入`
+    : isActivity
+    ? `你是一個資深前端工程師。
+請依照下方 spec.md 與 plan.md 實作完整活動頁面。
+
+【輸出規則】
+1. 輸出一個完整的 index.html（CSS 與 JS 直接內嵌）
+2. 格式：
+   \`\`\`html index.html
+   （完整 HTML 內容）
+   \`\`\`
+3. 程式碼完整可執行，包含所有互動邏輯`
+    : isSeo
+    ? `你是一個 SEO 專家。
+請依照下方 spec.md 與 plan.md，輸出所有需要修改的檔案與具體修改內容。
+
+【輸出規則】
+1. 每個要修改的位置用獨立區塊說明
+2. 直接給出修改後的程式碼，不要只說「請修改」`
+    : `你是一個資深全端工程師。
+請依照下方 spec.md 與 plan.md 實作完整程式碼。
+
+【輸出規則】
+1. 每個檔案用獨立程式碼區塊，語言標記後接相對路徑
+2. 程式碼完整可執行，禁止省略
+3. 路徑含 ⚠️ 的用合理預設值代入`;
+
+  const fullPrompt = `${instruction}
+
+---
+
+# spec.md（規格書）
+
+${specMd}
+
+---
+
+# plan.md（技術實作計畫）
+
+${planMd}`;
+
+  navigator.clipboard.writeText(fullPrompt).then(() => {
+    const el = document.getElementById('promptCopied');
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 8000);
+  }).catch(() => {
+    alert('複製失敗，請手動選取並複製。');
+  });
+}
 
 async function runAiImplementation() {
   const state = window._lastState;
