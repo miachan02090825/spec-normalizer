@@ -1540,21 +1540,61 @@ async function runAiImplementation() {
   const isTool    = state.docType === 'tool';
   const isActivity = state.docType === 'activity';
 
-  const systemPrompt = `你是一個資深全端工程師，專門實作後台工具（C# ASP.NET Core）與前台活動頁面（HTML/CSS/JS）。
+  const systemPrompt = `你是一個資深全端工程師，專門實作後台工具（C# ASP.NET Core）與前台管理頁面（HTML/CSS/JS）。
 
-依照使用者提供的 spec.md 與 plan.md 實作完整程式碼。
+依照使用者提供的 spec.md 與 plan.md，同時產出後端程式碼與前端頁面，讓專案可以直接使用。
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 【輸出格式規則 — 必須嚴格遵守】
-1. 每個檔案用獨立程式碼區塊，語言標記後空一格接相對路徑：
-   \`\`\`csharp Controllers/Tool/ExampleController.cs
-   （程式碼內容）
-   \`\`\`
-2. 程式碼必須完整可執行，禁止使用 // ...省略 或 TODO 代替實際邏輯
-3. 路徑有 ⚠️確認目錄 的地方，用最合理的預設值代入
-4. 後台工具（tool）：輸出 Controller + Repository + Request DTO + Response DTO
-5. 活動頁面（activity）：輸出一個完整 index.html（CSS 與 JS 直接內嵌其中）
-6. SEO 需求：輸出 changes.md 列出所有要修改的檔案與內容
-7. 每段程式碼前可加一行中文說明，其餘不需要解釋文字`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+每個檔案用獨立程式碼區塊，語言標記後空一格接相對路徑：
+\`\`\`csharp Controllers/Games/ExampleController.cs
+（完整程式碼）
+\`\`\`
+- 程式碼必須完整可執行，禁止 // ...省略 或 TODO
+- 路徑有 ⚠️ 的地方用最合理的預設值代入
+- 每段程式碼前可加一行中文說明
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【後台工具（docType: tool）必須產出以下所有檔案】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+▌後端（C# RESTful API）
+每個工具各產出：
+- Controllers/[路徑]/[Name]Controller.cs — [HttpGet/Post/Put/Delete]，回傳 Ok(data)
+- Repositories/[Name]Repository.cs — 含 Interface 定義 + SQL 實作（用 SqlParameter 防 injection）
+- Models/DTOs/[Name]Dto.cs — Request DTO（含 [Required][Range] 防呆）+ Response DTO
+
+▌前端（純 HTML，不依賴框架）
+共用檔案（只產出一次）：
+- Frontend/_shared.css — 共用樣式（表格、按鈕、Modal、Toast、Loading、Confirm Dialog）
+
+每個工具各產出一個 HTML：
+- Frontend/[tool-name].html — 完整管理頁面，包含：
+  * 標題列（含後台選單路徑 breadcrumb）
+  * 資料表格（可排序，顯示所有欄位）
+  * 新增按鈕 → Modal 表單（含防呆驗證）
+  * 編輯按鈕 → Modal 表單（預填現有值）
+  * 刪除按鈕 → 確認對話框
+  * 成功/失敗 Toast 提示
+  * 載入中 Loading 遮罩
+  * 引用 <link rel="stylesheet" href="_shared.css">
+  * 所有 fetch() 呼叫對應後端 API 路由
+
+▌Mock 假資料（方便前端直接測試，不需後端）
+- Frontend/_mock.js — 攔截 fetch()，每個工具各 3–5 筆假資料，支援 GET/POST/PUT/DELETE
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【活動頁面（docType: activity）】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Frontend/index.html — 完整活動頁面（HTML + CSS + JS 全內嵌）
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【最後額外輸出】
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+\`\`\`text README.md
+列出所有產出檔案、工程師需要修改的地方（namespace、DbContext 名稱、路由前綴），以及上線時要移除 _mock.js 的說明
+\`\`\``;
 
   const userPrompt = `# spec.md（規格書）\n\n${specMd}\n\n---\n\n# plan.md（技術實作計畫）\n\n${planMd}`;
 
@@ -1569,7 +1609,7 @@ async function runAiImplementation() {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 16000,
+        max_tokens: 32000,
         stream: true,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
