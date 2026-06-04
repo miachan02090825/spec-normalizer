@@ -409,8 +409,8 @@ body {
       <div class="ai-model-row">
         <span>模型：</span>
         <select id="modelSelect">
-          <option value="claude-sonnet-4-5">Sonnet（快速）</option>
-          <option value="claude-opus-4-5">Opus（更強）</option>
+          <option value="claude-sonnet-4-6">Sonnet 4.6（快速）</option>
+          <option value="claude-opus-4-8">Opus 4.8（最強）</option>
         </select>
       </div>
     </div>
@@ -1457,9 +1457,10 @@ function copyFullPrompt() {
    \`\`\`csharp Controllers/Tool/ExampleController.cs
    （完整程式碼）
    \`\`\`
-2. 必須輸出：Controller、Repository、Request DTO、Response DTO
+2. 必須輸出：Controller、Repository、Request DTO、Response DTO，以及前端 HTML 頁面
 3. 程式碼完整可執行，禁止省略
-4. 路徑含 ⚠️ 的用合理預設值代入`
+4. 路徑含 ⚠️ 的用合理預設值代入
+5. 最後額外輸出一個 README.md，包含：產出檔案清單、需要工程師修改的地方（namespace / DbContext / 路由前綴）、DI 注冊語法、上線前確認清單（含移除 _mock.js 提醒）`
     : isActivity
     ? `你是一個資深前端工程師。
 請依照下方 spec.md 與 plan.md 實作完整活動頁面。
@@ -1590,10 +1591,64 @@ async function runAiImplementation() {
 - Frontend/index.html — 完整活動頁面（HTML + CSS + JS 全內嵌）
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-【最後額外輸出】
+【最後額外輸出 README.md】
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 \`\`\`text README.md
-列出所有產出檔案、工程師需要修改的地方（namespace、DbContext 名稱、路由前綴），以及上線時要移除 _mock.js 的說明
+# [專案名稱] — 工程師整合說明
+
+> 由「規格文件標準化工具」自動生成，請依實際專案結構調整。
+
+---
+
+## 📁 產出檔案清單
+
+| 檔案路徑 | 說明 |
+|---------|------|
+| （逐一列出所有產出的 .cs / .html / .css / .js 檔案及其用途） |
+
+---
+
+## ⚙️ 整合前必須修改的地方
+
+| 項目 | 目前預設值 | 請改為 |
+|------|-----------|--------|
+| Namespace | \`YourProject.*\` | 依專案實際 namespace |
+| DbContext | \`SlamDbContext\` / \`SlamConfigDbContext\` | 依 DB IP 對應的 context 名稱 |
+| 路由前綴 | \`/api/⚠️確認前綴/...\` | 依專案 API 路由慣例 |
+| DB 連線字串 | 規格書 IP | 請確認測試 / 正式環境 config |
+
+---
+
+## 🚀 快速啟動（前端 Mock 模式）
+
+1. 直接用瀏覽器開啟任一 \`Frontend/*.html\`
+2. 確認 HTML 有引用 \`<script src="_mock.js"></script>\`（在 _shared.css 之後）
+3. 所有 fetch 會被攔截，顯示假資料，無需後端
+
+---
+
+## 🔌 DI 注冊（貼入 Program.cs）
+
+\`\`\`csharp
+// 貼入 builder.Services 區塊
+（逐一列出所有 Repository 的 DI 注冊語法）
+\`\`\`
+
+---
+
+## ✅ 上線前確認清單
+
+- [ ] 所有 \`⚠️\` 佔位符已替換為實際值
+- [ ] \`Frontend/*.html\` 中的 \`<script src="_mock.js"></script>\` 已移除或改為 false
+- [ ] DB 連線字串已切換為正式環境
+- [ ] 權限名稱已確認並加入驗證
+- [ ] 已在測試環境驗收通過
+
+---
+
+## 📋 已知待補充事項
+
+（列出規格書中仍有 ⚠️ 或待確認的欄位）
 \`\`\``;
 
   const userPrompt = `# spec.md（規格書）\n\n${specMd}\n\n---\n\n# plan.md（技術實作計畫）\n\n${planMd}`;
