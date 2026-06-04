@@ -421,9 +421,13 @@ body {
   <div class="ai-output-wrap" id="aiOutputWrap" style="display:none;">
     <div class="ai-output-toolbar">
       <span><span class="ai-status-dot idle" id="aiDot"></span><span id="aiStatusText">準備中</span></span>
-      <button class="btn btn-success" id="downloadZipBtn" onclick="downloadGeneratedZip()" style="display:none;">⬇ 下載程式碼 ZIP</button>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span id="rawToggle" onclick="toggleRawOutput()" style="display:none;font-size:0.78rem;color:var(--text2);cursor:pointer;text-decoration:underline;white-space:nowrap;">查看原始輸出</span>
+        <button class="btn btn-success" id="downloadZipBtn" onclick="downloadGeneratedZip()" style="display:none;">⬇ 下載程式碼 ZIP</button>
+      </div>
     </div>
-    <pre class="ai-output-pre" id="aiOutputPre"></pre>
+    <div id="aiFilePreview" style="display:none;padding:14px 16px;"></div>
+    <pre class="ai-output-pre" id="aiOutputPre" style="display:none;"></pre>
   </div>
 </div>
 
@@ -1386,6 +1390,11 @@ async function processFile(file) {
     document.getElementById('aiOutputWrap').style.display = 'none';
     document.getElementById('downloadZipBtn').style.display = 'none';
     document.getElementById('aiOutputPre').textContent = '';
+    document.getElementById('aiOutputPre').style.display = 'none';
+    document.getElementById('aiFilePreview').style.display = 'none';
+    document.getElementById('aiFilePreview').innerHTML = '';
+    document.getElementById('rawToggle').style.display = 'none';
+    document.getElementById('rawToggle').textContent = '查看原始輸出';
     window._generatedCode = '';
 
     renderMissing(found);
@@ -1510,6 +1519,19 @@ ${planMd}`;
   });
 }
 
+function toggleRawOutput() {
+  const pre    = document.getElementById('aiOutputPre');
+  const toggle = document.getElementById('rawToggle');
+  if (pre.style.display === 'none') {
+    pre.textContent = window._generatedCode || '';
+    pre.style.display = 'block';
+    toggle.textContent = '隱藏原始輸出';
+  } else {
+    pre.style.display = 'none';
+    toggle.textContent = '查看原始輸出';
+  }
+}
+
 async function runAiImplementation() {
   const state = window._lastState;
   if (!state) { alert('請先上傳規格文件'); return; }
@@ -1531,9 +1553,14 @@ async function runAiImplementation() {
   wrap.style.display = 'block';
   dlBtn.style.display = 'none';
   pre.textContent = '';
+  pre.style.display = 'none';
   window._generatedCode = '';
   dot.className = 'ai-status-dot';
   statusEl.textContent = '連線中...';
+  document.getElementById('aiFilePreview').style.display = 'none';
+  document.getElementById('aiFilePreview').innerHTML = '';
+  document.getElementById('rawToggle').style.display = 'none';
+  document.getElementById('rawToggle').textContent = '查看原始輸出';
 
   // ── 組合 prompt ──────────────────────────────────────
   const planMd    = buildPlanMd(state.flatText, state.fileName, state.found, state.docType);
@@ -1697,16 +1724,38 @@ async function runAiImplementation() {
           const evt = JSON.parse(raw);
           if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
             fullText += evt.delta.text;
-            pre.textContent = fullText;
-            pre.scrollTop = pre.scrollHeight;
+            const kb = fullText.length > 1000 ? Math.round(fullText.length / 1000) + 'K' : fullText.length;
+            statusEl.textContent = '生成中... ' + kb + ' 字元';
           }
         } catch (_) {}
       }
     }
 
     window._generatedCode = fullText;
-    dot.className  = 'ai-status-dot done';
-    statusEl.textContent = '✅ 生成完成';
+    dot.className = 'ai-status-dot done';
+
+    // 解析產出檔案名稱，顯示清單
+    const filePreview = document.getElementById('aiFilePreview');
+    const rawToggle   = document.getElementById('rawToggle');
+    const fileRegex   = /```[\w#+\-]*[ \t]+([^\n]+)\n/g;
+    let fm;
+    const fileNames = [];
+    while ((fm = fileRegex.exec(fullText)) !== null) {
+      const p = fm[1].trim();
+      if (p.includes('.') || p.includes('/')) fileNames.push(p);
+    }
+    if (fileNames.length > 0) {
+      filePreview.style.display = 'block';
+      filePreview.innerHTML =
+        `<div style="font-size:0.84rem;color:var(--text2);margin-bottom:10px;">共產出 <strong style="color:var(--accent2)">${fileNames.length}</strong> 個檔案：</div>` +
+        `<div style="display:flex;flex-wrap:wrap;gap:6px;">${fileNames.map(f =>
+          `<span style="background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:3px 9px;font-size:0.78rem;font-family:monospace;color:var(--text);">${f}</span>`
+        ).join('')}</div>`;
+      statusEl.textContent = '✅ 生成完成，共 ' + fileNames.length + ' 個檔案';
+    } else {
+      statusEl.textContent = '✅ 生成完成';
+    }
+    rawToggle.style.display = 'inline';
     dlBtn.style.display = 'block';
 
   } catch (err) {
