@@ -1,0 +1,15 @@
+# 參考用的存檔網頁與模板原始素材（非程式，不進版控）
+*_files/
+admin1.txt
+admin2.TXT
+admin1.png
+admin2.png
+admin3.jpg
+
+# Claude Code 本機專用設定
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# 暫存
+*.tmp
+_test_spec.*
