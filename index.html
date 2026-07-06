@@ -146,6 +146,36 @@ body {
 }
 #fileInput { display: none; }
 
+/* Skill zone (Step 3) */
+.skill-zone {
+  background: var(--surface); box-shadow: var(--shadow);
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 16px 18px; cursor: pointer; margin-bottom: 24px;
+  transition: border-color var(--trans), background var(--trans);
+}
+.skill-zone:hover, .skill-zone.drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+.skill-empty { display: flex; align-items: center; gap: 14px; }
+.skill-icon { font-size: 1.6rem; opacity: 0.7; flex-shrink: 0; }
+.skill-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 3px; }
+.skill-desc { font-size: 0.76rem; color: var(--text2); line-height: 1.5; }
+.skill-loaded { cursor: default; }
+.skill-loaded-head { display: flex; align-items: center; justify-content: space-between; font-size: 0.84rem; margin-bottom: 10px; }
+.skill-remove {
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text2); font-size: 0.75rem; padding: 2px 9px; cursor: pointer;
+  transition: border-color var(--trans), color var(--trans);
+}
+.skill-remove:hover { border-color: var(--bad); color: var(--bad); }
+.skill-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.skill-chip {
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 20px;
+  padding: 2px 11px; font-size: 0.73rem; color: var(--text2);
+  font-family: ui-monospace, monospace;
+}
+
 /* Progress */
 .progress-bar {
   background: var(--surface); border: 1px solid var(--border);
@@ -363,6 +393,43 @@ body {
 .btn-green:hover { opacity: 0.83; }
 .btn-green:active { transform: scale(0.97); }
 
+/* ── Stage 2 reserved block ── */
+.stage2-section {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 22px 24px;
+  margin-top: 20px; box-shadow: var(--shadow);
+}
+.stage2-head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.stage2-badge {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 2px 9px; border-radius: 20px;
+  background: rgba(124,114,255,.12); color: var(--accent); border: 1px solid rgba(124,114,255,.25);
+}
+.stage2-slot {
+  border: 2px dashed var(--border2); border-radius: var(--radius);
+  min-height: 160px; display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--accent) 3%, var(--surface2));
+}
+.stage2-slot.filled { display: block; border-style: solid; border-width: 1px; border-color: var(--border); background: var(--bg); overflow: hidden; }
+.stage2-empty { text-align: center; padding: 28px 16px; }
+.stage2-empty .s2-icon { font-size: 2rem; opacity: 0.55; margin-bottom: 10px; }
+.stage2-empty .s2-title { font-size: 0.92rem; font-weight: 700; margin-bottom: 5px; }
+.stage2-empty .s2-desc { font-size: 0.8rem; color: var(--text2); line-height: 1.5; }
+.s2-files { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 12px 10px; border-bottom: 1px solid var(--border); }
+.s2-file {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: 3px 10px; font-size: 0.75rem; font-family: ui-monospace, monospace;
+  color: var(--text2); cursor: pointer; transition: border-color var(--trans), color var(--trans);
+}
+.s2-file:hover { border-color: var(--accent); }
+.s2-file.active { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.s2-code {
+  padding: 14px 16px; font-size: 0.76rem;
+  font-family: 'Cascadia Code', 'Consolas', ui-monospace, monospace;
+  color: var(--text); white-space: pre; overflow: auto;
+  max-height: 480px; margin: 0; line-height: 1.55; text-align: left;
+}
+
 /* ── Claude Design output ── */
 .design-output-wrap {
   border: 1px solid var(--border); border-radius: 9px;
@@ -460,6 +527,26 @@ body {
       <span class="fmt-badge">📝 Word .docx</span>
       <span class="fmt-badge">📑 PowerPoint .pptx</span>
       <span class="fmt-badge">📃 純文字 .txt</span>
+    </div>
+  </div>
+
+  <!-- Step 3: 放入 Skill -->
+  <div class="step-label" style="margin:24px 0 12px;"><span class="step-num">3</span> 放入 Skill 規範包（選用）</div>
+  <div class="skill-zone" id="skillZone">
+    <input type="file" id="skillInput" accept=".zip" style="display:none;">
+    <div class="skill-empty" id="skillEmpty">
+      <span class="skill-icon">🧩</span>
+      <div>
+        <div class="skill-title">點擊或拖曳 skill 包（.zip）到這裡</div>
+        <div class="skill-desc">載入團隊 .agents skill 規範（Controller / Repository / DTO 生成慣例），後端程式將依此產出。未載入時使用內建 GTW_Admin2Api 慣例。</div>
+      </div>
+    </div>
+    <div class="skill-loaded" id="skillLoaded" style="display:none;">
+      <div class="skill-loaded-head">
+        <span>✅ 已載入 Skill 包：<b id="skillPackName"></b></span>
+        <button class="skill-remove" onclick="removeSkillPack(event)">✕ 移除</button>
+      </div>
+      <div class="skill-chips" id="skillChips"></div>
     </div>
   </div>
 
@@ -578,6 +665,32 @@ body {
     </div>
     <iframe class="design-preview-frame" id="designPreviewFrame" sandbox="allow-scripts allow-same-origin"></iframe>
     <pre class="design-code-pre" id="designCodePre"></pre>
+  </div>
+</div>
+
+<!-- ── 第二階段：後端程式生成（依 .agents skill 慣例）─────────── -->
+<div class="stage2-section" id="stage2Section" style="display:none;">
+  <div class="stage2-head">
+    <div class="ai-title" style="background:none;-webkit-text-fill-color:initial;color:var(--text);">🧩 第二階段 · 生成後端程式（C# API）</div>
+    <span class="stage2-badge">GTW_Admin2Api 慣例</span>
+  </div>
+  <p style="font-size:0.78rem;color:var(--text2);margin-bottom:12px;line-height:1.55;">
+    依規格欄位與 DB 表名，產出符合團隊 skill 規範的完整後端：Controller（GT_AdminControllerBase / 權限 / 白名單排序）、Repository + UnitOfWork（介面 + 實作）、Entity、DTO，以及對接第一階段 Vue 的 <b>api.js</b>。
+  </p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+    <button class="btn-green" id="runBackendBtn" onclick="runBackendGeneration()">⚙ 生成後端程式</button>
+    <button class="btn btn-success" id="downloadBackendBtn" onclick="downloadBackendZip()" style="display:none;">⬇ 下載後端 ZIP</button>
+  </div>
+  <div class="stage2-slot" id="stage2Slot">
+    <div class="stage2-empty" id="stage2Empty">
+      <div class="s2-icon">📦</div>
+      <div class="s2-title">尚未生成</div>
+      <div class="s2-desc">上傳規格文件後，點「⚙ 生成後端程式」即可產出檔案</div>
+    </div>
+    <div id="stage2Result" style="display:none;width:100%;">
+      <div class="s2-files" id="stage2Files"></div>
+      <pre class="s2-code" id="stage2Code"></pre>
+    </div>
   </div>
 </div>
 
@@ -1594,6 +1707,7 @@ async function processFile(file) {
       showProgress(false);
       document.getElementById('results').classList.add('active');
       aiSection.style.display = 'block';
+      document.getElementById('stage2Section').style.display = 'block';
       // 已選模板 → 自動本地生成對應後台畫面
       autoGenerateIfReady();
     }, 400);
@@ -1779,6 +1893,7 @@ function selectTemplate(key) {
 function autoGenerateIfReady() {
   if (!window._selectedTemplate) return; // 未選模板 → 維持手動流程
   runLocalGeneration();
+  runBackendGeneration(); // 第二階段：後端程式同步生成（與前端同一份欄位）
   const wrap = document.getElementById('designOutputWrap');
   if (wrap) setTimeout(() => wrap.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
 }
@@ -2065,6 +2180,491 @@ function runLocalGeneration() {
   switchDesignTab('preview');
 }
 
+// ═══ 第二階段：後端程式生成（依 .agents skill 慣例 / GTW_Admin2Api）═══════════
+
+// 中文欄名 → 英文字典（組字用）
+const COL_WORD_DICT = [
+  ['玩家','Player'],['會員','Member'],['帳號','Account'],['暱稱','Nickname'],
+  ['獎勵','Reward'],['獎品','Prize'],['名稱','Name'],['編號','No'],
+  ['建立','Create'],['時間','Time'],['日期','Date'],['轉換','Convert'],
+  ['金額','Amount'],['數量','Count'],['狀態','Status'],['類型','Type'],
+  ['平台','Platform'],['領取','Receive'],['發送','Send'],['更新','Update'],
+  ['開始','Start'],['結束','End'],['原始','Origin'],['幣','Coin'],['點數','Point'],
+];
+
+function extractSpecMeta(state) {
+  const text = state.flatText || '';
+  const columns = extractSpecColumns(state);
+
+  // DB 表名：[GameTower3_Log].[dbo].[AIO_DeplicateReward_Record]
+  const tm = text.match(/\[(\w+)\]\s*\.\s*\[(\w+)\]\s*\.\s*\[(\w+)\]/);
+  const db = tm ? tm[1] : 'YourDatabase';
+  const schema = tm ? tm[2] : 'dbo';
+  const table = tm ? tm[3] : 'YourTable';
+
+  // 英文 DB 欄位：[AccountId] [PrizeName]...（排除表名三段）
+  const dbFields = [];
+  const fre = /\[([A-Za-z_][A-Za-z0-9_]*)\]/g;
+  let fm2;
+  while ((fm2 = fre.exec(text)) !== null) {
+    const f = fm2[1];
+    if ([db, schema, table].includes(f)) continue;
+    if (!dbFields.includes(f)) dbFields.push(f);
+  }
+
+  // PascalCase Entity 名（保留段內既有大寫，如 DeplicateReward；全大寫縮寫如 AIO 原樣保留）
+  const pascal = s => s.split(/[_\s-]+/).filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+  const entity = pascal(table);
+  // kebab / snake：同時切「小寫→大寫」與「連續大寫→大寫+小寫」邊界（AIODeplicate → aio-deplicate）
+  const splitWords = s => s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2');
+  const kebab  = splitWords(entity).toLowerCase();
+  const moduleName = splitWords(entity).replace(/-/g, '_').toUpperCase();
+
+  // Domain/Context：GameTower3_Log → GameTower3 / Log
+  const dbParts = db.split('_');
+  const domain  = dbParts[0] || db;
+  const context = dbParts.slice(1).join('') || domain;
+
+  // 欄位對應：中文欄名 → 英文屬性（優先配對規格書中的 DB 欄位）
+  const usedFields = new Set();
+  const fieldHints = [
+    [/Account/i, /帳號/], [/Nick/i, /暱稱/], [/(Name)/i, /名稱/],
+    [/(Amount|Coin|Point)/i, /幣|金額|點數/], [/(Time|Date)/i, /時間|日期/],
+    [/(MemberNo|MemberId)/i, /會員編號/], [/(No|Id)$/i, /編號/], [/Count|Qty/i, /數量/],
+    [/Status|State/i, /狀態/],
+  ];
+  const props = columns.map(col => {
+    // 1. 從規格書 DB 欄位找對應
+    for (const f of dbFields) {
+      if (usedFields.has(f)) continue;
+      for (const [fp, cp] of fieldHints) {
+        if (fp.test(f) && cp.test(col)) { usedFields.add(f); return { col, name: f }; }
+      }
+    }
+    // 2. 字典組字
+    let name = '';
+    let rest = col;
+    for (const [zh, en] of COL_WORD_DICT) {
+      if (rest.includes(zh)) { name += en; rest = rest.replace(zh, ''); }
+    }
+    return { col, name: name || ('Field' + (columns.indexOf(col) + 1)) };
+  });
+  // 型別推斷（注意：Account 結尾含 "count"，須先排除）
+  for (const p of props) {
+    if (/(Time|Date)$/i.test(p.name) || /時間|日期/.test(p.col)) p.type = 'DateTime';
+    else if (/Account$/i.test(p.name) || /帳號|暱稱|名稱/.test(p.col)) p.type = 'string';
+    else if (/(Amount|Count|No|Id|Coin|Point|Qty)$/i.test(p.name) || /幣|金額|數量|編號|點數/.test(p.col)) p.type = 'int';
+    else p.type = 'string';
+  }
+
+  const toolTitle = (state.fileName || '').replace(/\.[^.]+$/, '');
+  return { columns, dbFields, db, schema, table, entity, kebab, moduleName, domain, context, props, toolTitle };
+}
+
+function buildBackendFiles(m) {
+  const files = [];
+  const ns = 'GTW_Admin2Api';
+  const propLines = t => m.props.map(p =>
+    `        /// <summary>${p.col}</summary>\n        public ${p.type}${p.type === 'string' ? '' : ''} ${p.name} { get; set; }${p.type === 'string' ? '' : ''}`
+  ).join('\n\n');
+  const sortWhitelist = m.props.filter(p => p.type !== 'string' || /Name|Account/i.test(p.name)).map(p => p.name);
+
+  // ── 1. Entity ──
+  files.push({ path: `Models/${m.domain}/${m.context}/${m.entity}.cs`, content:
+`using System;
+
+namespace ${ns}.Models.${m.domain}.${m.context}
+{
+    /// <summary>
+    /// 資料來源：${m.db}.${m.schema}.${m.table}
+    /// ⚠️ 正式專案請以 EF Core scaffold 產生後，將本檔內容併入 partial class
+    /// </summary>
+    public partial class ${m.entity}
+    {
+${m.props.map(p => `        /// <summary>${p.col}</summary>\n        public ${p.type} ${p.name} { get; set; }`).join('\n\n')}
+    }
+}
+` });
+
+  // ── 2. Response DTO ──
+  files.push({ path: `DTOs/${m.domain}/${m.entity}ItemResponse.cs`, content:
+`using System;
+
+namespace ${ns}.DTOs.${m.domain}
+{
+    /// <summary>${m.toolTitle} — 列表項目回傳（禁止直接回傳 Entity）</summary>
+    public class ${m.entity}ItemResponse
+    {
+${m.props.map(p => `        /// <summary>${p.col}</summary>\n        public ${p.type} ${p.name} { get; set; }`).join('\n\n')}
+    }
+}
+` });
+
+  // ── 3. Repository 介面 ──
+  files.push({ path: `Interface/Repository/${m.domain}/${m.context}/GT_I${m.entity}Repository.cs`, content:
+`using System.Collections.Generic;
+using System.Threading.Tasks;
+using ${ns}.Models.${m.domain}.${m.context};
+
+namespace ${ns}.Interface.Repository.${m.domain}.${m.context}
+{
+    public interface GT_I${m.entity}Repository : GT_IRepository<${m.entity}>
+    {
+        /// <summary>查詢列表（分頁 + 白名單排序 + 關鍵字）</summary>
+        Task<List<${m.entity}>> GetListAsync(int page, int pageSize, string orderBy, string searchField, string searchValue);
+
+        /// <summary>查詢總筆數</summary>
+        Task<int> GetCountAsync(string searchField, string searchValue);
+    }
+}
+` });
+
+  // ── 4. Repository 實作 ──
+  const colSelect = m.props.map(p => p.name).join(', ');
+  files.push({ path: `Repository/${m.domain}/${m.context}/GT_${m.entity}Repository.cs`, content:
+`using System.Collections.Generic;
+using System.Threading.Tasks;
+using Microsoft.Data.SqlClient;
+using ${ns}.Interface.Repository.${m.domain}.${m.context};
+using ${ns}.Models.${m.domain}.${m.context};
+
+namespace ${ns}.Repository.${m.domain}.${m.context}
+{
+    public class GT_${m.entity}Repository : GT_Repository<${m.entity}>, GT_I${m.entity}Repository
+    {
+        // 搜尋欄位白名單（禁止任意欄位，避免 SQL Injection）
+        private static readonly HashSet<string> searchFieldWhitelist = new()
+        {
+            ${m.props.filter(p => p.type === 'string' || /No|Id/.test(p.name)).map(p => `"${p.name}"`).join(', ')}
+        };
+
+        public GT_${m.entity}Repository(${m.context}Context context) : base(context) { }
+
+        /// <inheritdoc/>
+        public async Task<List<${m.entity}>> GetListAsync(int page, int pageSize, string orderBy, string searchField, string searchValue)
+        {
+            var where = string.Empty;
+            var parameters = new List<SqlParameter>
+            {
+                new("@offset", (page - 1) * pageSize),
+                new("@pageSize", pageSize),
+            };
+
+            if (!string.IsNullOrEmpty(searchField) && searchFieldWhitelist.Contains(searchField))
+            {
+                where = $"WHERE {searchField} LIKE @searchValue";
+                parameters.Add(new SqlParameter("@searchValue", $"%{searchValue}%"));
+            }
+
+            // orderBy 由 Controller 端以白名單轉換，僅接受合法欄位
+            var sql = $@"
+                SELECT ${colSelect}
+                FROM ${m.db}.${m.schema}.${m.table} WITH (NOLOCK)
+                {where}
+                ORDER BY {orderBy}
+                OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
+
+            return await ExecuteSqlQueryAsync<${m.entity}>(sql, parameters.ToArray());
+        }
+
+        /// <inheritdoc/>
+        public async Task<int> GetCountAsync(string searchField, string searchValue)
+        {
+            var where = string.Empty;
+            var parameters = new List<SqlParameter>();
+
+            if (!string.IsNullOrEmpty(searchField) && searchFieldWhitelist.Contains(searchField))
+            {
+                where = $"WHERE {searchField} LIKE @searchValue";
+                parameters.Add(new SqlParameter("@searchValue", $"%{searchValue}%"));
+            }
+
+            var sql = $"SELECT COUNT(1) AS Value FROM ${m.db}.${m.schema}.${m.table} WITH (NOLOCK) {where}";
+            var result = await ExecuteSqlQueryAsync<int>(sql, parameters.ToArray());
+            return result.Count > 0 ? result[0] : 0;
+        }
+    }
+}
+` });
+
+  // ── 5. UnitOfWork 介面 ──
+  files.push({ path: `Interface/UnitOfWork/${m.domain}/${m.context}/GT_I${m.context}UnitOfWork.cs`, content:
+`using ${ns}.Interface.Repository.${m.domain}.${m.context};
+
+namespace ${ns}.Interface.UnitOfWork.${m.domain}.${m.context}
+{
+    /// <summary>
+    /// ⚠️ 建立前必做：掃描既有 UnitOfWork（Get-ChildItem -Recurse -Filter "*UnitOfWork.cs" "UnitOfWork/"）
+    /// 若 ${m.db} 已有 UnitOfWork → 只在其中新增 ${m.entity}Repository 屬性，勿重建本檔
+    /// </summary>
+    public interface GT_I${m.context}UnitOfWork : GT_IUnitOfWork
+    {
+        GT_I${m.entity}Repository ${m.entity}Repository { get; }
+    }
+}
+` });
+
+  // ── 6. UnitOfWork 實作 ──
+  files.push({ path: `UnitOfWork/${m.domain}/${m.context}/GT_${m.context}UnitOfWork.cs`, content:
+`using ${ns}.Interface.Repository.${m.domain}.${m.context};
+using ${ns}.Interface.UnitOfWork.${m.domain}.${m.context};
+using ${ns}.Repository.${m.domain}.${m.context};
+
+namespace ${ns}.UnitOfWork.${m.domain}.${m.context}
+{
+    public class GT_${m.context}UnitOfWork : GT_UnitOfWork, GT_I${m.context}UnitOfWork
+    {
+        public GT_I${m.entity}Repository ${m.entity}Repository { get; private set; }
+
+        public GT_${m.context}UnitOfWork(${m.context}Context context, GT_ILoggerHelpers logger)
+            : base(context, logger) { }
+
+        public override void LinkNewRepository()
+        {
+            ${m.entity}Repository = CreateNewRepository<GT_${m.entity}Repository, ${m.context}Context>();
+        }
+    }
+}
+` });
+
+  // ── 7. Controller ──
+  const defaultSort = (m.props.find(p => p.type === 'DateTime') || m.props[0]).name;
+  files.push({ path: `Controllers/${m.domain}/${m.entity}Controller.cs`, content:
+`using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
+using ${ns}.Interface.UnitOfWork.${m.domain}.${m.context};
+
+namespace ${ns}.Controllers.${m.domain}
+{
+    [Route("${m.domain.toLowerCase()}/${m.kebab}")]
+    public class ${m.entity}Controller : GT_AdminControllerBase
+    {
+        private readonly GT_I${m.context}UnitOfWork unitOfWork;
+
+        // 排序白名單（禁止 Dynamic OrderBy 任意欄位）
+        private static readonly string[] sortWhitelist = { ${sortWhitelist.map(f => `"${f}"`).join(', ')} };
+
+        public ${m.entity}Controller(GT_ICommonHelpers common, GT_I${m.context}UnitOfWork unitOfWork)
+            : base(common)
+        {
+            this.unitOfWork = unitOfWork;
+        }
+
+        /// <summary>${m.toolTitle} — 取得列表</summary>
+        /// <remarks>
+        /// 資料來源：${m.db}..${m.table}
+        ///
+        /// 流程：
+        /// 1. 權限檢查
+        /// 2. 綁定搜尋欄位（白名單驗證）
+        /// 3. 查詢資料（含分頁排序）
+        ///
+        /// Success response:
+        ///
+        ///     {
+        ///         "Code": 0,
+        ///         "Message": "SUCCESS",
+        ///         "Data": { "Page":1, "PageSize":20, "Total":100, "Items":[...] }
+        ///     }
+        ///
+        /// 注意事項：
+        /// - 排序白名單：${sortWhitelist.join(', ')}
+        /// </remarks>
+        [HttpGet("list")]
+        public async Task<GT_HttpResponseObject> GetListAsync([FromQuery] GT_SearchCommonRequest request)
+        {
+            if (!hasError)
+            {
+                CheckPermissionAndNoPermissionProcess("${m.moduleName}.ACTION_BROWSE");
+            }
+
+            if (!hasError)
+            {
+                if (!BindSearchFieldAndErrorProcess(request))
+                {
+                    code = GT_WEBAPI_RETURN_CODE.CONNECTION_TIMEOUT_9102;
+                }
+            }
+
+            if (!hasError)
+            {
+                try
+                {
+                    processMemo = "取得${m.toolTitle}列表";
+
+                    var orderBy = request.ToOrderByString("${defaultSort}-", sortWhitelist);
+                    var items = await unitOfWork.${m.entity}Repository.GetListAsync(
+                        request.Page, request.PageSize, orderBy, request.SearchField, request.SearchValue);
+                    var total = await unitOfWork.${m.entity}Repository.GetCountAsync(
+                        request.SearchField, request.SearchValue);
+
+                    data = new GT_SearchCommonResponse
+                    {
+                        Page = request.Page,
+                        PageSize = request.PageSize,
+                        Total = total,
+                        Items = items.Select(x => new DTOs.${m.domain}.${m.entity}ItemResponse
+                        {
+${m.props.map(p => `                            ${p.name} = x.${p.name},`).join('\n')}
+                        }).ToList(),
+                    };
+                }
+                catch (Exception e)
+                {
+                    code = GT_WEBAPI_RETURN_CODE.CONNECTION_TIMEOUT_9100;
+                    common.Logger.LogError(e, processMemo);
+                }
+            }
+
+            return GetResponseObject();
+        }
+    }
+}
+` });
+
+  // ── 8. 前端串接 api.js ──
+  files.push({ path: `Frontend/api.js`, content:
+`// ${m.toolTitle} — 前端 API 串接（對應 ${m.entity}Controller）
+// 回傳協定：GT_HttpResponseObject { Code, Message, Data }（Code 0 = 成功）
+
+const API_BASE = '/${m.domain.toLowerCase()}/${m.kebab}';
+
+async function request(url, options = {}) {
+  const resp = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      // request.js interceptor 會自動附加 Authorization / Gt-Session-Id
+    },
+    ...options,
+  });
+  const body = await resp.json();
+  if (body.Code === 9101) { window.location.href = '/login'; return; } // Session 過期
+  if (body.Code !== 0) { throw new Error(body.Message || ('錯誤碼 ' + body.Code)); }
+  return body.Data;
+}
+
+/**
+ * 取得列表（分頁 + 排序 + 搜尋）
+ * @returns {Promise<{Page:number, PageSize:number, Total:number, Items:Array}>}
+ */
+export function getList({ page = 1, pageSize = 20, sort = '${defaultSort}-', searchField = '', searchValue = '' } = {}) {
+  const qs = new URLSearchParams({ Page: page, PageSize: pageSize, Sort: sort });
+  if (searchField) { qs.set('SearchField', searchField); qs.set('SearchValue', searchValue); }
+  return request(API_BASE + '/list?' + qs.toString());
+}
+
+// 欄位對應（Vue 表格 ↔ DTO）
+export const FIELD_MAP = {
+${m.props.map(p => `  '${p.col}': '${p.name}',`).join('\n')}
+};
+` });
+
+  // ── 9. README ──
+  files.push({ path: `README.md`, content:
+`# ${m.toolTitle} — 後端整合說明
+
+> 由「規格文件標準化工具」第二階段自動生成，遵循 ${window._skillPack ? window._skillPack.name + ' skill 規範' : '.agents skill 慣例（GTW_Admin2Api）'}。
+
+## 📁 產出檔案
+
+| 檔案 | 說明 |
+|------|------|
+${files.map(f => `| \`${f.path}\` | |`).join('\n')}
+| \`Controllers/${m.domain}/${m.entity}Controller.cs\` | 列表 API（權限 + 分頁 + 白名單排序） |
+| \`Frontend/api.js\` | 前端串接（對應第一階段 Vue） |
+
+## 🔌 DI 註冊（貼入 Startup.cs）
+
+\`\`\`csharp
+services.AddDbContext<${m.context}Context>(
+    options => GT_DbContextOptionsBuilder.UseSqlServer(options, "${m.db}", services)
+);
+services.AddScoped<GT_I${m.context}UnitOfWork, GT_${m.context}UnitOfWork>();
+services.AddScoped<${m.context}Context>();
+\`\`\`
+
+## 🔗 與第一階段 Vue 串接
+
+1. 第一階段產出的 .vue 內建 mock 資料（rows ref）
+2. 引入 \`Frontend/api.js\`，把 mock 改為：
+
+\`\`\`js
+import { getList, FIELD_MAP } from './api';
+
+onMounted(async () => {
+  const data = await getList({ page: 1, pageSize: 20 });
+  rows.value = data.Items.map(item =>
+    Object.fromEntries(Object.entries(FIELD_MAP).map(([zh, en]) => [zh, item[en]])));
+  total.value = data.Total;
+});
+\`\`\`
+
+## ⚙️ 整合前必須確認
+
+- [ ] **掃描既有 UnitOfWork**：\`Get-ChildItem -Recurse -Filter "*UnitOfWork.cs" "UnitOfWork/"\` — 若 ${m.db} 已有，把 Repository 併入，刪除本包的 UnitOfWork 檔
+- [ ] Entity 請以 EF Core scaffold 為準（本包為手寫版）
+- [ ] 權限字串 \`${m.moduleName}.ACTION_BROWSE\` 已建入權限系統
+- [ ] Keyless entity：若查詢不對應真實資料表，在 OnModelCreatingPartial 加 \`HasNoKey()\`
+- [ ] 完成後執行 \`dotnet build && dotnet test\`
+- [ ] 更新 \`api-catalog.md\`（見下方）
+
+## 📇 api-catalog.md 登錄
+
+\`\`\`markdown
+### ${m.toolTitle}
+| 端點 | Method | 權限 | Repository | Log |
+|------|--------|------|-----------|-----|
+| /${m.domain.toLowerCase()}/${m.kebab}/list | GET | ${m.moduleName}.ACTION_BROWSE | GT_${m.entity}Repository | WEB |
+\`\`\`
+` });
+
+  return files;
+}
+
+function runBackendGeneration() {
+  const state = window._lastState;
+  if (!state) { showError('請先上傳規格文件'); return; }
+
+  const meta  = extractSpecMeta(state);
+  const files = buildBackendFiles(meta);
+  window._backendFiles = files;
+
+  document.getElementById('stage2Empty').style.display = 'none';
+  document.getElementById('stage2Result').style.display = 'block';
+  document.getElementById('stage2Slot').classList.add('filled');
+  document.getElementById('downloadBackendBtn').style.display = 'inline-block';
+
+  const chipsEl = document.getElementById('stage2Files');
+  chipsEl.innerHTML = files.map((f, i) =>
+    `<span class="s2-file${i === 0 ? ' active' : ''}" onclick="showBackendFile(${i})">${f.path}</span>`).join('');
+  showBackendFile(0);
+  showToast('⚙ 後端程式生成完成，共 ' + files.length + ' 個檔案');
+}
+
+function showBackendFile(i) {
+  const files = window._backendFiles || [];
+  if (!files[i]) return;
+  document.querySelectorAll('.s2-file').forEach((c, j) => c.classList.toggle('active', j === i));
+  document.getElementById('stage2Code').textContent = files[i].content;
+}
+
+async function downloadBackendZip() {
+  const files = window._backendFiles || [];
+  if (!files.length) return;
+  const zip = new JSZip();
+  for (const f of files) zip.file(f.path, f.content);
+  const state = window._lastState;
+  const base  = state ? state.fileName.replace(/\.[^.]+$/, '') : 'backend';
+  const blob  = await zip.generateAsync({ type: 'blob' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href = url; a.download = base + '_backend.zip'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
 // ─── Claude Design generation ────────────────────────────────────────────────
 function switchDesignTab(tab) {
   const frame = document.getElementById('designPreviewFrame');
@@ -2175,13 +2775,86 @@ uploadZone.addEventListener('drop', e => {
   if (file) processFile(file);
 });
 
+// ─── Step 3: Skill 包載入 ─────────────────────────────────────────────────────
+const skillZone  = document.getElementById('skillZone');
+const skillInput = document.getElementById('skillInput');
+
+skillZone.addEventListener('click', e => {
+  if (window._skillPack) return; // 已載入 → 不重開選檔（移除鈕有自己的 handler）
+  skillInput.click();
+});
+skillInput.addEventListener('change', e => { if (e.target.files[0]) loadSkillPack(e.target.files[0]); });
+skillZone.addEventListener('dragenter', e => { e.preventDefault(); skillZone.classList.add('drag-over'); });
+skillZone.addEventListener('dragover',  e => { e.preventDefault(); skillZone.classList.add('drag-over'); });
+skillZone.addEventListener('dragleave', e => {
+  if (!skillZone.contains(e.relatedTarget)) skillZone.classList.remove('drag-over');
+});
+skillZone.addEventListener('drop', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  skillZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadSkillPack(file);
+});
+
+async function loadSkillPack(file) {
+  if (!/\.zip$/i.test(file.name)) { showError('Skill 包請使用 .zip 格式'); return; }
+  try {
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    // 找出所有 SKILL.md（.agents/skills/{name}/SKILL.md）與 instructions
+    const skills = [];
+    const refs = [];
+    for (const path of Object.keys(zip.files)) {
+      const sm = path.match(/skills\/([^/]+)\/SKILL\.md$/i);
+      if (sm) { skills.push(sm[1]); continue; }
+      if (/instructions\/[^/]+\.instructions\.md$/i.test(path) || /shared-references\/[^/]+\.md$/i.test(path)) {
+        refs.push(path.split('/').pop());
+      }
+    }
+    if (!skills.length && !refs.length) {
+      showError('此 zip 內找不到 SKILL.md 或 instructions 規範檔');
+      return;
+    }
+    window._skillPack = { name: file.name, skills, refs };
+
+    document.getElementById('skillEmpty').style.display = 'none';
+    document.getElementById('skillLoaded').style.display = 'block';
+    document.getElementById('skillPackName').textContent = file.name + '（' + skills.length + ' 個 skill、' + refs.length + ' 份規範）';
+    document.getElementById('skillChips').innerHTML =
+      skills.map(s => `<span class="skill-chip">🧩 ${s}</span>`).join('') +
+      refs.map(r => `<span class="skill-chip">📄 ${r}</span>`).join('');
+    // 更新第二階段徽章
+    const badge = document.querySelector('.stage2-badge');
+    if (badge) badge.textContent = '依 ' + file.name + ' 規範';
+    showToast('🧩 Skill 包已載入：' + skills.length + ' 個 skill');
+  } catch (err) {
+    showError('Skill 包解析失敗：' + err.message);
+  }
+}
+
+function removeSkillPack(e) {
+  e.stopPropagation();
+  window._skillPack = null;
+  skillInput.value = '';
+  document.getElementById('skillEmpty').style.display = 'flex';
+  document.getElementById('skillLoaded').style.display = 'none';
+  const badge = document.querySelector('.stage2-badge');
+  if (badge) badge.textContent = 'GTW_Admin2Api 慣例';
+}
+
 document.getElementById('resetBtn').addEventListener('click', () => {
   document.getElementById('results').classList.remove('active');
   document.getElementById('aiSection').style.display = 'none';
+  document.getElementById('stage2Section').style.display = 'none';
   fileInput.value = '';
   window._lastState = null;
   window._generatedVueCode = '';
+  window._backendFiles = null;
   document.getElementById('designOutputWrap').style.display = 'none';
+  document.getElementById('stage2Empty').style.display = 'block';
+  document.getElementById('stage2Result').style.display = 'none';
+  document.getElementById('stage2Slot').classList.remove('filled');
+  document.getElementById('downloadBackendBtn').style.display = 'none';
   // 重設 ring
   const ring = document.getElementById('ringFill');
   if (ring) ring.style.strokeDashoffset = '238.76';

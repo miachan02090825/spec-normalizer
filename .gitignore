@@ -10,6 +10,9 @@ admin3.jpg
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# 團隊內部 skill 規範包（不進公開 repo）
+skills.zip
+
 # 暫存
 *.tmp
 _test_spec.*
