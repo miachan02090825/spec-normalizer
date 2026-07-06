@@ -187,8 +187,9 @@ body {
 .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width 0.3s; }
 
 /* Results layout */
-.results { display: none; gap: 20px; grid-template-columns: 320px 1fr; }
-.results.active { display: grid; }
+.results { display: none; }
+.results.active { display: block; }
+.file-bar { display: flex; align-items: center; gap: 12px; }
 
 /* Panel */
 .panel {
@@ -556,67 +557,11 @@ body {
     <div class="bar-track"><div class="bar-fill" id="barFill" style="width:0%"></div></div>
   </div>
 
-  <!-- Results -->
+  <!-- Results：檔案資訊列（僅保留前端 + 後端生成） -->
   <div class="results" id="results">
-    <div>
-      <!-- File info -->
-      <div class="file-info" id="fileInfo"></div>
-
-      <!-- Score + Missing -->
-      <div class="panel">
-        <div class="panel-header">
-          <span>📋</span> 完整度分析
-        </div>
-        <div class="panel-body">
-          <div class="doctype-row">
-            <span>偵測類型</span>
-            <select id="docTypeSelect" onchange="overrideDocType(this.value)">
-              <option value="general">網頁需求規格</option>
-              <option value="tool">後台工具規格</option>
-              <option value="activity">Web 活動頁</option>
-              <option value="seo">SEO 優化需求</option>
-              <option value="feature">功能需求</option>
-            </select>
-          </div>
-          <div class="score-ring">
-            <div class="ring-wrap">
-              <svg class="ring-svg" viewBox="0 0 100 100">
-                <defs>
-                  <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stop-color="#6c63ff"/>
-                    <stop offset="100%" stop-color="#00c9a7"/>
-                  </linearGradient>
-                </defs>
-                <circle cx="50" cy="50" r="38" fill="none" stroke="var(--surface2)" stroke-width="9"/>
-                <circle cx="50" cy="50" r="38" fill="none" stroke="url(#ringGrad)" stroke-width="9"
-                  stroke-dasharray="238.76" stroke-dashoffset="238.76" stroke-linecap="round"
-                  transform="rotate(-90 50 50)" id="ringFill"/>
-              </svg>
-              <div class="ring-inner">
-                <div class="score-num" id="scoreNum">--</div>
-                <div class="score-label">完整度</div>
-              </div>
-            </div>
-          </div>
-          <ul class="missing-list" id="missingList"></ul>
-        </div>
-      </div>
-
-      <button class="reset-btn" id="resetBtn">↩ 重新上傳</button>
-    </div>
-
-    <!-- Markdown output -->
-    <div class="panel md-panel">
-      <div class="md-toolbar">
-        <span id="mdLabel">標準化 Markdown 規格書</span>
-        <div class="btn-group">
-          <button class="btn btn-secondary" onclick="copyMd()">複製 spec</button>
-          <button class="btn btn-secondary" onclick="copyPlanMd()">複製計畫</button>
-          <button class="btn btn-success" onclick="downloadPlanMd()">📅 plan.md</button>
-          <button class="btn btn-primary" onclick="downloadMd()">⬇ spec.md</button>
-        </div>
-      </div>
-      <textarea class="md-output" id="mdOutput" spellcheck="false"></textarea>
+    <div class="file-bar">
+      <div class="file-info" id="fileInfo" style="margin-bottom:0;flex:1;"></div>
+      <button class="reset-btn" id="resetBtn" style="margin-top:0;width:auto;padding:9px 18px;">↩ 重新上傳</button>
     </div>
   </div>
 </div>
@@ -656,6 +601,7 @@ body {
     <div class="design-output-toolbar">
       <span><span class="ai-status-dot idle" id="designDot"></span><span id="designStatusText">準備中</span></span>
       <div style="display:flex;align-items:center;gap:8px;">
+        <select id="toolSelect" onchange="switchTool(this.value)" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:0.78rem;cursor:pointer;max-width:220px;"></select>
         <div class="design-tabs">
           <button class="design-tab active" id="tabPreview" onclick="switchDesignTab('preview')">預覽</button>
           <button class="design-tab" id="tabCode" onclick="switchDesignTab('code')">程式碼</button>
@@ -1597,36 +1543,6 @@ function calcScore(found) {
 }
 
 // ─── Render missing list ──────────────────────────────────────────────────────
-function renderMissing(found) {
-  const list = document.getElementById('missingList');
-  list.innerHTML = '';
-  // 只列出「適用且缺漏」的欄位（排除 null）
-  const missing = REQUIRED_FIELDS.filter(f => found[f.key] === false);
-  const present = REQUIRED_FIELDS.filter(f => found[f.key] === true);
-
-  if (missing.length === 0) {
-    list.innerHTML = '<li style="color:var(--accent2);padding:8px 0;font-size:0.9rem;">✅ 所有適用欄位均已偵測到！</li>';
-  } else {
-    for (const f of missing) {
-      const li = document.createElement('li');
-      li.className = `missing-item severity-${f.severity}`;
-      li.innerHTML = `<span class="icon"></span>
-        <div class="info">
-          <div class="field">缺少：${f.label}</div>
-          <div class="desc">${f.hint}</div>
-        </div>`;
-      list.appendChild(li);
-    }
-  }
-
-  if (present.length) {
-    const okDiv = document.createElement('li');
-    okDiv.style.cssText = 'padding:8px 0;font-size:0.82rem;color:var(--text2);border-top:1px solid var(--border);margin-top:4px;';
-    okDiv.textContent = `✅ 已偵測 ${present.length} 個欄位：${present.map(f => f.label).join('、')}`;
-    list.appendChild(okDiv);
-  }
-}
-
 // ─── Main processing ──────────────────────────────────────────────────────────
 async function processFile(file) {
   showProgress(true);
@@ -1669,7 +1585,6 @@ async function processFile(file) {
     setProgress(80, '生成標準化 Markdown...');
     const docType = detectDocType(flatText, file.name);
     const found = analyzeFields(flatText, docType, parsed.type);
-    const score = calcScore(found);
     const md = buildMarkdown(flatText, parsed, file.name, found, docType);
 
     setProgress(100, '完成！');
@@ -1683,25 +1598,14 @@ async function processFile(file) {
         <div class="file-meta">${ext.toUpperCase()} · ${sizeKb} KB · ${parsed.type === 'xlsx' ? Object.keys(parsed.sheets).length + ' sheets' : parsed.type === 'pptx' ? parsed.slides.length + ' slides' : parsed.type === 'txt' ? Math.round(parsed.text.length / 100) / 10 + ' KB 文字' : '1 document'}</div>
       </div>`;
 
-    // Score
-    const scoreEl = document.getElementById('scoreNum');
-    scoreEl.textContent = score + '%';
-    scoreEl.className = 'score-num ' + (score >= 70 ? 'score-good' : score >= 45 ? 'score-mid' : 'score-bad');
-    updateScoreRing(score);
-
     // 存全域狀態供 plan.md 與 AI 實作使用
     window._lastState = { flatText, parsed, parsedType: parsed.type, fileName: file.name, found, docType, specMd: md };
-    const dtSel = document.getElementById('docTypeSelect');
-    if (dtSel) dtSel.value = docType;
+    window._activeToolIdx = 0; // 新文件從第一個工具開始
 
     // 顯示生成前端介面區（移到成功路徑末尾）
     const aiSection = document.getElementById('aiSection');
     // 重設輸出區
     document.getElementById('designOutputWrap').style.display = 'none';
-
-    renderMissing(found);
-    document.getElementById('mdOutput').value = md;
-    document.getElementById('mdLabel').textContent = `標準化 Markdown · ${file.name.replace(/\.[^.]+$/, '')}.md`;
 
     setTimeout(() => {
       showProgress(false);
@@ -1729,67 +1633,6 @@ function showToast(msg, isError) {
   setTimeout(() => { t.classList.remove('show'); t.style.background = ''; t.style.color = ''; }, isError ? 4000 : 2000);
 }
 function showError(msg) { showToast('❌ ' + msg, true); }
-
-function updateScoreRing(score) {
-  const ring = document.getElementById('ringFill');
-  if (!ring) return;
-  const circ = 238.76;
-  ring.style.strokeDashoffset = circ * (1 - score / 100);
-}
-
-function overrideDocType(newType) {
-  const s = window._lastState;
-  if (!s) return;
-  s.docType = newType;
-  const found = analyzeFields(s.flatText, newType, s.parsedType);
-  s.found = found;
-  const score = calcScore(found);
-  const md = buildMarkdown(s.flatText, s.parsed, s.fileName, found, newType);
-  s.specMd = md;
-  const scoreEl = document.getElementById('scoreNum');
-  scoreEl.textContent = score + '%';
-  scoreEl.className = 'score-num ' + (score >= 70 ? 'score-good' : score >= 45 ? 'score-mid' : 'score-bad');
-  updateScoreRing(score);
-  renderMissing(found);
-  document.getElementById('mdOutput').value = md;
-  document.getElementById('mdLabel').textContent = `標準化 Markdown · ${s.fileName.replace(/\.[^.]+$/, '')}.md`;
-}
-
-// ─── Actions ──────────────────────────────────────────────────────────────────
-function copyMd() {
-  navigator.clipboard.writeText(document.getElementById('mdOutput').value)
-    .then(() => showToast('已複製 spec.md！'));
-}
-
-function copyPlanMd() {
-  const s = window._lastState;
-  if (!s) { showError('請先上傳規格文件'); return; }
-  navigator.clipboard.writeText(buildPlanMd(s.flatText, s.fileName, s.found, s.docType))
-    .then(() => showToast('已複製 plan.md！'));
-}
-
-function downloadMd() {
-  const text = document.getElementById('mdOutput').value;
-  const label = document.getElementById('mdLabel').textContent;
-  const fileName = label.split('·').pop().trim() || 'spec.md';
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = fileName;
-  a.click();
-}
-
-function downloadPlanMd() {
-  const s = window._lastState;
-  if (!s) { showError('請先上傳規格文件'); return; }
-  const text = buildPlanMd(s.flatText, s.fileName, s.found, s.docType);
-  const planName = s.fileName.replace(/\.[^.]+$/, '') + '_plan.md';
-  const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = planName;
-  a.click();
-}
 
 // ─── AI 自動實作 ──────────────────────────────────────────────────────────────
 
@@ -1979,10 +1822,11 @@ function extractSpecColumns(state) {
   return hits.slice(0, 7);
 }
 
-function buildLocalVue(tplKey, state) {
+function buildLocalVue(tplKey, state, tool) {
   const tpl = ADMIN_TEMPLATES[tplKey];
-  const title = (state.fileName || '後台管理').replace(/\.[^.]+$/, '');
-  const cols = extractSpecColumns(state);
+  const meta = extractSpecMeta(state, tool);
+  const title = meta.toolTitle || '後台管理';
+  const cols = meta.columns;
   const colDefs = cols.map(c => `      <el-table-column prop="${c}" label="${c}" show-overflow-tooltip />`).join('\n');
   const mockVals = (c, i) => {
     if (/時間|日期/.test(c)) return `'2026/07/0${(i % 5) + 1} 1${i}:2${i}:00'`;
@@ -2168,16 +2012,38 @@ function runLocalGeneration() {
   const codePre = document.getElementById('designCodePre');
   const dlBtn   = document.getElementById('downloadDesignBtn');
 
-  const vueCode = buildLocalVue(tplKey, state);
+  // 多工具拆分（xlsx 每個顯示分頁 = 一個工具）
+  const tools = extractTools(state);
+  window._tools = tools;
+  if (window._activeToolIdx == null || window._activeToolIdx >= tools.length) window._activeToolIdx = 0;
+  const tool = tools[window._activeToolIdx];
+
+  // 工具切換選單（多於 1 個才顯示）
+  const sel = document.getElementById('toolSelect');
+  if (sel) {
+    if (tools.length > 1) {
+      sel.innerHTML = tools.map((t, i) => `<option value="${i}"${i === window._activeToolIdx ? ' selected' : ''}>${t.sheetName || t.name}</option>`).join('');
+      sel.style.display = 'inline-block';
+    } else {
+      sel.style.display = 'none';
+    }
+  }
+
+  const vueCode = buildLocalVue(tplKey, state, tool);
   window._generatedVueCode = vueCode;
 
   wrap.style.display = 'block';
   codePre.textContent = vueCode;
   frame.srcdoc = buildVuePreview(vueCode);
   dot.className = 'ai-status-dot done'; dot.style.display = 'inline-block';
-  status.textContent = '生成完成 · ' + tpl.name;
+  status.textContent = '生成完成 · ' + tpl.name + (tools.length > 1 ? `（${window._activeToolIdx + 1}/${tools.length}：${tool.name}）` : '');
   dlBtn.style.display = 'inline-block';
   switchDesignTab('preview');
+}
+
+function switchTool(idx) {
+  window._activeToolIdx = parseInt(idx, 10) || 0;
+  runLocalGeneration();
 }
 
 // ═══ 第二階段：後端程式生成（依 .agents skill 慣例 / GTW_Admin2Api）═══════════
@@ -2192,9 +2058,58 @@ const COL_WORD_DICT = [
   ['開始','Start'],['結束','End'],['原始','Origin'],['幣','Coin'],['點數','Point'],
 ];
 
-function extractSpecMeta(state) {
-  const text = state.flatText || '';
-  const columns = extractSpecColumns(state);
+// ─── 多工具拆分：xlsx 每個「顯示」分頁 = 一個工具 ────────────────────────────
+function extractTools(state) {
+  const p = state.parsed;
+  const tools = [];
+  if (p && p.type === 'xlsx' && p.sheets) {
+    for (const [name, rows] of Object.entries(p.sheets)) {
+      const text = rows.map(r => r.join(' | ')).join('\n');
+      if (text.replace(/\s/g, '').length < 30) continue; // 空白/純備註分頁跳過
+      tools.push({
+        name: name.replace(/^[（(][^（()）]*[）)]/, '').trim() || name, // 去掉 (新增)/(調整) 前綴
+        sheetName: name,
+        flatText: text,
+      });
+    }
+  }
+  if (!tools.length) {
+    tools.push({ name: (state.fileName || '工具').replace(/\.[^.]+$/, ''), sheetName: null, flatText: state.flatText });
+  }
+  return tools;
+}
+
+// 明確欄位定義表：「欄位名稱 | 欄位說明」後接 [field] | 中文說明（取第一組 = 主表）
+function extractFieldPairs(text) {
+  const lines = text.split(/\r?\n/);
+  const pairs = [];
+  let inTable = false;
+  let miss = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!inTable) {
+      if (/欄位名稱\s*\|\s*欄位說明/.test(line)) inTable = true;
+      continue;
+    }
+    // 遇到下一張表（另一組 [db].[dbo].[table] 或另一個欄位表頭）→ 主表結束
+    if (/\[\w+\]\s*\.\s*\[\w+\]\s*\.\s*\[\w+\]/.test(line) || /欄位名稱\s*\|\s*欄位說明/.test(line)) break;
+    // 只取第二欄（欄位說明）；第三欄以後（如「在工具上如何設定」）忽略
+    const m = line.match(/^\[?([A-Za-z_][A-Za-z0-9_]*)\]?\s*\|\s*([^|]+)/);
+    if (m) { pairs.push({ field: m[1], desc: m[2].trim().slice(0, 12) }); miss = 0; }
+    else if (pairs.length && ++miss >= 3) break; // 容忍儲存格內換行造成的續行
+  }
+  return pairs;
+}
+
+function extractSpecMeta(state, tool) {
+  const text = (tool && tool.flatText) || state.flatText || '';
+
+  // 優先使用明確欄位定義表（Excel 規格常見格式）
+  const pairs = extractFieldPairs(text);
+  const pascalField = s => s.split(/[_\s-]+/).filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+  const columns = pairs.length >= 3 ? pairs.map(p => p.desc)
+                : extractSpecColumns({ flatText: text });
 
   // DB 表名：[GameTower3_Log].[dbo].[AIO_DeplicateReward_Record]
   const tm = text.match(/\[(\w+)\]\s*\.\s*\[(\w+)\]\s*\.\s*\[(\w+)\]/);
@@ -2234,7 +2149,10 @@ function extractSpecMeta(state) {
     [/(MemberNo|MemberId)/i, /會員編號/], [/(No|Id)$/i, /編號/], [/Count|Qty/i, /數量/],
     [/Status|State/i, /狀態/],
   ];
-  const props = columns.map(col => {
+  const props = pairs.length >= 3
+    // 明確欄位定義表 → 直接一一對應（[api_id] | 平台id → ApiId / 平台id）
+    ? pairs.map(p => ({ col: p.desc, name: pascalField(p.field) }))
+    : columns.map(col => {
     // 1. 從規格書 DB 欄位找對應
     for (const f of dbFields) {
       if (usedFields.has(f)) continue;
@@ -2254,11 +2172,11 @@ function extractSpecMeta(state) {
   for (const p of props) {
     if (/(Time|Date)$/i.test(p.name) || /時間|日期/.test(p.col)) p.type = 'DateTime';
     else if (/Account$/i.test(p.name) || /帳號|暱稱|名稱/.test(p.col)) p.type = 'string';
-    else if (/(Amount|Count|No|Id|Coin|Point|Qty)$/i.test(p.name) || /幣|金額|數量|編號|點數/.test(p.col)) p.type = 'int';
+    else if (/(Amount|Count|No|Id|Coin|Point|Qty|Bet|Level|Weight|Index)$/i.test(p.name) || /幣|金額|數量|編號|點數|等級|權重/.test(p.col)) p.type = 'int';
     else p.type = 'string';
   }
 
-  const toolTitle = (state.fileName || '').replace(/\.[^.]+$/, '');
+  const toolTitle = (tool && tool.name) || (state.fileName || '').replace(/\.[^.]+$/, '');
   return { columns, dbFields, db, schema, table, entity, kebab, moduleName, domain, context, props, toolTitle };
 }
 
@@ -2526,7 +2444,7 @@ ${m.props.map(p => `                            ${p.name} = x.${p.name},`).join(
 ` });
 
   // ── 8. 前端串接 api.js ──
-  files.push({ path: `Frontend/api.js`, content:
+  files.push({ path: `Frontend/api-${m.kebab}.js`, content:
 `// ${m.toolTitle} — 前端 API 串接（對應 ${m.entity}Controller）
 // 回傳協定：GT_HttpResponseObject { Code, Message, Data }（Code 0 = 成功）
 
@@ -2563,7 +2481,7 @@ ${m.props.map(p => `  '${p.col}': '${p.name}',`).join('\n')}
 ` });
 
   // ── 9. README ──
-  files.push({ path: `README.md`, content:
+  files.push({ path: `README_${m.entity}.md`, content:
 `# ${m.toolTitle} — 後端整合說明
 
 > 由「規格文件標準化工具」第二階段自動生成，遵循 ${window._skillPack ? window._skillPack.name + ' skill 規範' : '.agents skill 慣例（GTW_Admin2Api）'}。
@@ -2574,7 +2492,7 @@ ${m.props.map(p => `  '${p.col}': '${p.name}',`).join('\n')}
 |------|------|
 ${files.map(f => `| \`${f.path}\` | |`).join('\n')}
 | \`Controllers/${m.domain}/${m.entity}Controller.cs\` | 列表 API（權限 + 分頁 + 白名單排序） |
-| \`Frontend/api.js\` | 前端串接（對應第一階段 Vue） |
+| \`Frontend/api-${m.kebab}.js\` | 前端串接（對應第一階段 Vue） |
 
 ## 🔌 DI 註冊（貼入 Startup.cs）
 
@@ -2589,7 +2507,7 @@ services.AddScoped<${m.context}Context>();
 ## 🔗 與第一階段 Vue 串接
 
 1. 第一階段產出的 .vue 內建 mock 資料（rows ref）
-2. 引入 \`Frontend/api.js\`，把 mock 改為：
+2. 引入 \`Frontend/api-${m.kebab}.js\`，把 mock 改為：
 
 \`\`\`js
 import { getList, FIELD_MAP } from './api';
@@ -2628,8 +2546,68 @@ function runBackendGeneration() {
   const state = window._lastState;
   if (!state) { showError('請先上傳規格文件'); return; }
 
-  const meta  = extractSpecMeta(state);
-  const files = buildBackendFiles(meta);
+  // 每個工具（xlsx 顯示分頁）各產一組後端檔案
+  const tools = extractTools(state);
+  const files = [];
+  const seen = new Set();
+  const metas = [];
+  for (const tool of tools) {
+    const meta = extractSpecMeta(state, tool);
+    metas.push(meta);
+    for (const f of buildBackendFiles(meta)) {
+      if (/\/UnitOfWork\//.test('/' + f.path)) continue; // UnitOfWork 於下方依 DB 合併產生
+      if (seen.has(f.path)) continue;
+      seen.add(f.path);
+      files.push(f);
+    }
+  }
+
+  // 同一 DB（domain/context）的工具共用一個 UnitOfWork，合併所有 Repository
+  const groups = {};
+  for (const m of metas) {
+    const key = m.domain + '/' + m.context;
+    (groups[key] = groups[key] || []).push(m);
+  }
+  for (const group of Object.values(groups)) {
+    const g = group[0];
+    const ns = 'GTW_Admin2Api';
+    files.push({ path: `Interface/UnitOfWork/${g.domain}/${g.context}/GT_I${g.context}UnitOfWork.cs`, content:
+`using ${ns}.Interface.Repository.${g.domain}.${g.context};
+
+namespace ${ns}.Interface.UnitOfWork.${g.domain}.${g.context}
+{
+    /// <summary>
+    /// ⚠️ 建立前必做：掃描既有 UnitOfWork（Get-ChildItem -Recurse -Filter "*UnitOfWork.cs" "UnitOfWork/"）
+    /// 若 ${g.db} 已有 UnitOfWork → 只在其中新增下列 Repository 屬性，勿重建本檔
+    /// </summary>
+    public interface GT_I${g.context}UnitOfWork : GT_IUnitOfWork
+    {
+${group.map(m => `        GT_I${m.entity}Repository ${m.entity}Repository { get; }`).join('\n')}
+    }
+}
+` });
+    files.push({ path: `UnitOfWork/${g.domain}/${g.context}/GT_${g.context}UnitOfWork.cs`, content:
+`using ${ns}.Interface.Repository.${g.domain}.${g.context};
+using ${ns}.Interface.UnitOfWork.${g.domain}.${g.context};
+using ${ns}.Repository.${g.domain}.${g.context};
+
+namespace ${ns}.UnitOfWork.${g.domain}.${g.context}
+{
+    public class GT_${g.context}UnitOfWork : GT_UnitOfWork, GT_I${g.context}UnitOfWork
+    {
+${group.map(m => `        public GT_I${m.entity}Repository ${m.entity}Repository { get; private set; }`).join('\n')}
+
+        public GT_${g.context}UnitOfWork(${g.context}Context context, GT_ILoggerHelpers logger)
+            : base(context, logger) { }
+
+        public override void LinkNewRepository()
+        {
+${group.map(m => `            ${m.entity}Repository = CreateNewRepository<GT_${m.entity}Repository, ${g.context}Context>();`).join('\n')}
+        }
+    }
+}
+` });
+  }
   window._backendFiles = files;
 
   document.getElementById('stage2Empty').style.display = 'none';
@@ -2680,12 +2658,35 @@ function switchDesignTab(tab) {
   }
 }
 
-function downloadDesignHtml() {
+async function downloadDesignHtml() {
+  const state = window._lastState;
+  const tools = window._tools || [];
+  const toVueName = (s) => {
+    const m = extractSpecMeta(state, typeof s === 'object' ? s : null);
+    return (m.entity && m.entity !== 'YourTable') ? m.entity
+      : String(typeof s === 'object' ? s.name : s).replace(/[^\w一-龥]+/g, '').slice(0, 40) || 'AdminView';
+  };
+
+  // 多工具 → 全部 .vue 打包成 ZIP
+  if (tools.length > 1) {
+    const zip = new JSZip();
+    for (const tool of tools) {
+      const code = buildLocalVue(window._selectedTemplate, state, tool);
+      zip.file('views/' + toVueName(tool) + '.vue', code);
+    }
+    const base = state ? state.fileName.replace(/\.[^.]+$/, '') : 'views';
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = base + '_vue.zip'; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    showToast('⬇ 已打包 ' + tools.length + ' 個 .vue');
+    return;
+  }
+
   const code = window._generatedVueCode || '';
   if (!code) return;
-  const state = window._lastState;
   const base  = state ? state.fileName.replace(/\.[^.]+$/, '') : 'AdminView';
-  // 檔名轉 PascalCase.vue
   const name  = base.replace(/[^\w一-龥]+/g, ' ').trim().split(/\s+/)
                     .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('') || 'AdminView';
   const blob  = new Blob([code], { type: 'text/plain' });
@@ -2850,16 +2851,15 @@ document.getElementById('resetBtn').addEventListener('click', () => {
   window._lastState = null;
   window._generatedVueCode = '';
   window._backendFiles = null;
+  window._tools = null;
+  window._activeToolIdx = 0;
+  const toolSel = document.getElementById('toolSelect');
+  if (toolSel) toolSel.style.display = 'none';
   document.getElementById('designOutputWrap').style.display = 'none';
   document.getElementById('stage2Empty').style.display = 'block';
   document.getElementById('stage2Result').style.display = 'none';
   document.getElementById('stage2Slot').classList.remove('filled');
   document.getElementById('downloadBackendBtn').style.display = 'none';
-  // 重設 ring
-  const ring = document.getElementById('ringFill');
-  if (ring) ring.style.strokeDashoffset = '238.76';
-  document.getElementById('scoreNum').textContent = '--';
-  document.getElementById('scoreNum').className = 'score-num';
 });
 </script>
 </body>
