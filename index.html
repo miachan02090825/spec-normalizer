@@ -665,7 +665,7 @@ body {
       </div>
     </div>
     <div class="mock-strip" id="mockStrip">⚠️ 預覽中的表格資料為<b>示意假資料</b>，僅供確認版面與欄位；實際資料由工程師串接後端後顯示</div>
-    <iframe class="design-preview-frame" id="designPreviewFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+    <iframe class="design-preview-frame" id="designPreviewFrame" sandbox="allow-scripts"></iframe>
     <pre class="design-code-pre" id="designCodePre"></pre>
   </div>
 </div>
@@ -797,7 +797,13 @@ async function parseXlsx(buffer) {
     if (visibility) continue;
     const ws = wb.Sheets[name];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    sheets[name] = rows.map(r => r.map(c => String(c).trim()).filter(Boolean));
+    // 保留儲存格位置（只去除尾端空格），避免中間空儲存格造成欄位左移錯位
+    sheets[name] = rows.map(r => {
+      const cells = r.map(c => String(c).trim());
+      let end = cells.length;
+      while (end > 0 && !cells[end - 1]) end--;
+      return cells.slice(0, end);
+    });
   }
   return { type: 'xlsx', sheets };
 }
@@ -817,6 +823,14 @@ async function parsePptx(buffer) {
       return na - nb;
     });
 
+  // namespace 防禦：部分環境 querySelectorAll('sp') 抓不到 <p:sp>，退回 localName 掃描
+  const qsa = (root, name) => {
+    let list = root.querySelectorAll(name);
+    if (!list.length) list = [...root.getElementsByTagName('*')].filter(e => e.localName === name);
+    return list;
+  };
+  const qs1 = (root, name) => qsa(root, name)[0] || null;
+
   const slides = [];
   for (const sf of slideFiles) {
     const xmlStr = await zip.files[sf].async('text');
@@ -826,14 +840,14 @@ async function parsePptx(buffer) {
     // 逐文字框(<p:sp>)取字：段內 run 直接相連（修復「轉換ｉ」+「幣」斷詞），
     // 並讀取座標依「視覺位置」排序（PPT 檔內是插入順序，非畫面順序）
     const items = [];
-    doc.querySelectorAll('sp').forEach((sp, i) => {
-      const off = sp.querySelector('off');
+    qsa(doc, 'sp').forEach((sp, i) => {
+      const off = qs1(sp, 'off');
       const x = off ? parseInt(off.getAttribute('x') || '0', 10) : 0;
       const y = off ? parseInt(off.getAttribute('y') || '0', 10) : 0;
       const paras = [];
-      sp.querySelectorAll('p').forEach(p => {
+      qsa(sp, 'p').forEach(p => {
         let s = '';
-        p.querySelectorAll('t').forEach(t => { s += t.textContent; });
+        qsa(p, 't').forEach(t => { s += t.textContent; });
         s = s.trim();
         if (s) paras.push(s);
       });
@@ -849,12 +863,12 @@ async function parsePptx(buffer) {
 
     // 表格 (<a:tbl>) 另外處理：逐列輸出、儲存格用 | 分隔
     const tblLines = [];
-    doc.querySelectorAll('tbl').forEach(tbl => {
-      tbl.querySelectorAll('tr').forEach(tr => {
+    qsa(doc, 'tbl').forEach(tbl => {
+      qsa(tbl, 'tr').forEach(tr => {
         const cells = [];
-        tr.querySelectorAll('tc').forEach(tc => {
+        qsa(tr, 'tc').forEach(tc => {
           let s = '';
-          tc.querySelectorAll('t').forEach(t => { s += t.textContent; });
+          qsa(tc, 't').forEach(t => { s += t.textContent; });
           cells.push(s.trim());
         });
         if (cells.some(Boolean)) tblLines.push(cells.join(' | '));
@@ -1653,13 +1667,14 @@ async function processFile(file) {
     document.getElementById('fileInfo').innerHTML = `
       <span class="file-icon">${fileIcon(ext)}</span>
       <div>
-        <div class="file-name">${file.name}</div>
+        <div class="file-name">${escapeHtml(file.name)}</div>
         <div class="file-meta">${ext.toUpperCase()} · ${sizeKb} KB · ${parsed.type === 'xlsx' ? Object.keys(parsed.sheets).length + ' sheets' : parsed.type === 'pptx' ? parsed.slides.length + ' slides' : parsed.type === 'txt' ? Math.round(parsed.text.length / 100) / 10 + ' KB 文字' : '1 document'}</div>
       </div>`;
 
     // 存全域狀態供 plan.md 與 AI 實作使用
     window._lastState = { flatText, parsed, parsedType: parsed.type, fileName: file.name, found, docType, specMd: md };
-    window._activeToolIdx = 0; // 新文件從第一個工具開始
+    window._activeToolIdx = 0;      // 新文件從第一個工具開始
+    window._fieldOverrides = null;  // 舊文件的欄位覆寫不得沿用（同名分頁會誤套）
 
     // 顯示生成前端介面區（移到成功路徑末尾）
     const aiSection = document.getElementById('aiSection');
@@ -1683,6 +1698,13 @@ async function processFile(file) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+// HTML/JS 插值跳脫（防止檔名/分頁名/欄名夾帶標記注入）
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escJs(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' '); }
+
 function showToast(msg, isError) {
   const t = document.getElementById('copyToast');
   t.textContent = msg;
@@ -1857,8 +1879,8 @@ function extractSpecColumns(state) {
   }
 
   if (best && best.length >= 3) {
-    // 去重、上限 10 欄
-    return [...new Set(best)].slice(0, 10);
+    // 去重、消毒、上限 10 欄
+    return [...new Set(best)].map(sanitizeLabel).filter(Boolean).slice(0, 10);
   }
 
   // 策略二（PPT 常見）：欄名一行一個 → 找「連續短行」聚落，緊鄰英文 DB 欄位者優先
@@ -1893,7 +1915,7 @@ function extractSpecColumns(state) {
   if (runs.length) {
     runs.sort((a, b) => b.score - a.score);
     const top = runs[0];
-    if (top.score >= 8) return [...new Set(top.cols)].slice(0, 10);
+    if (top.score >= 8) return [...new Set(top.cols)].map(sanitizeLabel).filter(Boolean).slice(0, 10);
   }
 
   // 後備：舊關鍵字比對
@@ -2125,7 +2147,7 @@ function runLocalGeneration() {
   const sel = document.getElementById('toolSelect');
   if (sel) {
     if (tools.length > 1) {
-      sel.innerHTML = tools.map((t, i) => `<option value="${i}"${i === window._activeToolIdx ? ' selected' : ''}>${t.sheetName || t.name}</option>`).join('');
+      sel.innerHTML = tools.map((t, i) => `<option value="${i}"${i === window._activeToolIdx ? ' selected' : ''}>${escapeHtml(t.sheetName || t.name)}</option>`).join('');
       sel.style.display = 'inline-block';
     } else {
       sel.style.display = 'none';
@@ -2169,8 +2191,8 @@ function toggleFieldEditor(show) {
   document.getElementById('feRows').innerHTML = meta.props.map((p, i) => `
     <div class="fe-row">
       <input type="checkbox" id="fe_on_${i}" checked>
-      <input type="text" id="fe_col_${i}" value="${p.col.replace(/"/g, '&quot;')}">
-      <input type="text" id="fe_db_${i}" value="${p.dbName.replace(/"/g, '&quot;')}"${p.guessed ? ' style="border-color:var(--warn);" title="⚠️ DB 欄名為推測，請確認"' : ''}>
+      <input type="text" id="fe_col_${i}" value="${escapeHtml(p.col)}">
+      <input type="text" id="fe_db_${i}" value="${escapeHtml(p.dbName)}"${p.guessed ? ' style="border-color:var(--warn);" title="⚠️ DB 欄名為推測，請確認"' : ''}>
       <select id="fe_type_${i}">
         <option value="string"${p.type === 'string' ? ' selected' : ''}>string</option>
         <option value="int"${p.type === 'int' ? ' selected' : ''}>int</option>
@@ -2185,16 +2207,20 @@ function applyFieldEdits() {
   const tool = tools[window._activeToolIdx || 0];
   const rows = document.querySelectorAll('#feRows .fe-row');
   const props = [];
+  let badDb = null;
   rows.forEach((r, i) => {
     if (!document.getElementById('fe_on_' + i).checked) return;
-    const col    = document.getElementById('fe_col_' + i).value.trim();
+    const col    = sanitizeLabel(document.getElementById('fe_col_' + i).value);
     const dbName = document.getElementById('fe_db_' + i).value.trim();
     const type   = document.getElementById('fe_type_' + i).value;
     if (!dbName) return;
+    // DB 欄名進入生成的 SQL → 僅允許合法識別字（英文/數字/底線），防 Injection
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dbName)) { badDb = dbName; return; }
     const name = dbName.split(/[_\s-]+/).filter(Boolean)
       .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('') || ('Field' + (i + 1));
     props.push({ col: col || dbName, name, dbName, type });
   });
+  if (badDb) { showError('DB 欄位名僅允許英文、數字與底線：' + badDb); return; }
   if (!props.length) { showError('至少保留一個欄位'); return; }
   (window._fieldOverrides = window._fieldOverrides || {})[overrideKey(tool)] = props;
   toggleFieldEditor(false);
@@ -2224,7 +2250,7 @@ function extractTools(state) {
       const text = rows.map(r => r.join(' | ')).join('\n');
       if (text.replace(/\s/g, '').length < 30) continue; // 空白/純備註分頁跳過
       tools.push({
-        name: name.replace(/^[（(][^（()）]*[）)]/, '').trim() || name, // 去掉 (新增)/(調整) 前綴
+        name: sanitizeLabel(name.replace(/^[（(][^（()）]*[）)]/, '')) || sanitizeLabel(name) || 'Tool', // 去掉 (新增)/(調整) 前綴＋消毒
         sheetName: name,
         flatText: text,
       });
@@ -2236,6 +2262,11 @@ function extractTools(state) {
   return tools;
 }
 
+// 標籤消毒：欄名/工具名會進入 Vue SFC 模板與 C# 註解，移除可造成注入或破版的字元
+function sanitizeLabel(s) {
+  return String(s).replace(/[<>{}`$\\"'|]/g, '').trim().slice(0, 24);
+}
+
 // 明確欄位定義表：「欄位名稱 | 欄位說明」後接 [field] | 中文說明（取第一組 = 主表）
 function extractFieldPairs(text) {
   const lines = text.split(/\r?\n/);
@@ -2244,15 +2275,19 @@ function extractFieldPairs(text) {
   let miss = 0;
   for (const raw of lines) {
     const line = raw.trim();
+    const isFieldHeader = line.includes('欄位名稱') && line.includes('欄位說明');
     if (!inTable) {
-      if (/欄位名稱\s*\|\s*欄位說明/.test(line)) inTable = true;
+      if (isFieldHeader) inTable = true;
       continue;
     }
     // 遇到下一張表（另一組 [db].[dbo].[table] 或另一個欄位表頭）→ 主表結束
-    if (/\[\w+\]\s*\.\s*\[\w+\]\s*\.\s*\[\w+\]/.test(line) || /欄位名稱\s*\|\s*欄位說明/.test(line)) break;
-    // 只取第二欄（欄位說明）；第三欄以後（如「在工具上如何設定」）忽略
-    const m = line.match(/^\[?([A-Za-z_][A-Za-z0-9_]*)\]?\s*\|\s*([^|]+)/);
-    if (m) { pairs.push({ field: m[1], desc: m[2].trim().slice(0, 20) }); miss = 0; }
+    if (/\[\w+\]\s*\.\s*\[\w+\]\s*\.\s*\[\w+\]/.test(line) || isFieldHeader) break;
+    // 分段解析（容忍空儲存格與前導空欄）：第一個非空段 = 欄位名、其後第一個非空段 = 欄位說明
+    const segs = line.split('|').map(s => s.trim());
+    while (segs.length && !segs[0]) segs.shift();
+    const fm = segs[0] && segs[0].match(/^\[?([A-Za-z_][A-Za-z0-9_]*)\]?$/);
+    const desc = segs.slice(1).find(Boolean);
+    if (fm && desc) { pairs.push({ field: fm[1], desc: sanitizeLabel(desc) || fm[1] }); miss = 0; }
     else if (pairs.length && ++miss >= 3) break; // 容忍儲存格內換行造成的續行
   }
   return pairs;
@@ -2402,8 +2437,8 @@ namespace ${ns}.Interface.Repository.${m.domain}.${m.context}
 ` });
 
   // ── 4. Repository 實作 ──
-  // SELECT：DB 欄名 AS C# 屬性名（snake_case → PascalCase）
-  const colSelect = m.props.map(p => p.dbName === p.name ? p.name : `${p.dbName} AS ${p.name}`).join(', ');
+  // SELECT：[DB 欄名] AS [C# 屬性名]（一律加括號，容忍保留字/特殊表名）
+  const colSelect = m.props.map(p => `[${p.dbName}] AS [${p.name}]`).join(', ');
   const defaultSortProp = (m.props.find(p => p.type === 'DateTime') || m.props[0]);
   files.push({ path: `Repository/${m.domain}/${m.context}/GT_${m.entity}Repository.cs`, content:
 `using System.Collections.Generic;
@@ -2427,6 +2462,10 @@ ${m.props.map(p => `            ["${p.name}"] = "${p.dbName}",${p.guessed ? ' //
         /// <inheritdoc/>
         public async Task<List<${m.entity}>> GetListAsync(int page, int pageSize, string sort, string searchField, string searchValue)
         {
+            // 分頁防呆：page < 1 會產生負 OFFSET；pageSize 上限避免全表撈取
+            page = page < 1 ? 1 : page;
+            pageSize = pageSize < 1 ? 20 : (pageSize > 200 ? 200 : pageSize);
+
             var where = string.Empty;
             var parameters = new List<SqlParameter>
             {
@@ -2436,28 +2475,29 @@ ${m.props.map(p => `            ["${p.name}"] = "${p.dbName}",${p.guessed ? ' //
 
             if (!string.IsNullOrEmpty(searchField) && fieldMap.TryGetValue(searchField, out var searchColumn))
             {
-                where = $"WHERE {searchColumn} LIKE @searchValue ESCAPE '\\\\'";
+                where = $"WHERE [{searchColumn}] LIKE @searchValue ESCAPE '\\\\'";
                 var escaped = (searchValue ?? string.Empty)
                     .Replace("\\\\", "\\\\\\\\").Replace("%", "\\\\%").Replace("_", "\\\\_").Replace("[", "\\\\[");
                 parameters.Add(new SqlParameter("@searchValue", $"%{escaped}%"));
             }
 
-            // 排序：僅接受白名單屬性名（格式 "Name+" ASC / "Name-" DESC），轉為 DB 欄名
-            var orderBy = "${defaultSortProp.dbName} DESC";
+            // 排序：僅接受白名單屬性名（格式 "Name+" ASC / "Name-" DESC），轉為 [DB 欄名]
+            var orderBy = "[${defaultSortProp.dbName}] DESC";
             if (!string.IsNullOrEmpty(sort))
             {
                 var desc = sort.EndsWith("-");
                 var field = sort.TrimEnd('+', '-');
                 if (fieldMap.TryGetValue(field, out var sortColumn))
                 {
-                    orderBy = sortColumn + (desc ? " DESC" : " ASC");
+                    orderBy = "[" + sortColumn + "]" + (desc ? " DESC" : " ASC");
                 }
             }
 
             // TotalCount 以視窗函數附帶回傳，免第二次 COUNT 查詢
+            // 注意：page 超出最後一頁時本查詢回傳空集合，Total 會是 0（前端分頁正常操作不會發生）
             var sql = $@"
                 SELECT ${colSelect}, COUNT(1) OVER() AS TotalCount
-                FROM ${m.db}.${m.schema}.${m.table} WITH (NOLOCK)
+                FROM [${m.db}].[${m.schema}].[${m.table}] WITH (NOLOCK)
                 {where}
                 ORDER BY {orderBy}
                 OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
@@ -2824,9 +2864,9 @@ ${group.map(m => `            ${m.entity}Repository = CreateNewRepository<GT_${m
     grouped[key].push({ f, i });
   });
   chipsEl.innerHTML = groupOrder.map(key =>
-    `<div class="s2-group">${key}</div>` +
+    `<div class="s2-group">${escapeHtml(key)}</div>` +
     grouped[key].map(({ f, i }) =>
-      `<span class="s2-file${i === 0 ? ' active' : ''}" onclick="showBackendFile(${i})">${f.path.split('/').pop()}</span>`).join('')
+      `<span class="s2-file${i === 0 ? ' active' : ''}" onclick="showBackendFile(${i})">${escapeHtml(f.path.split('/').pop())}</span>`).join('')
   ).join('');
   showBackendFile(0);
 
@@ -3103,8 +3143,8 @@ async function loadSkillPack(file) {
     document.getElementById('skillLoaded').style.display = 'block';
     document.getElementById('skillPackName').textContent = file.name + '（' + skills.length + ' 個 skill、' + refs.length + ' 份規範）';
     document.getElementById('skillChips').innerHTML =
-      skills.map(s => `<span class="skill-chip">🧩 ${s}</span>`).join('') +
-      refs.map(r => `<span class="skill-chip">📄 ${r}</span>`).join('');
+      skills.map(s => `<span class="skill-chip">🧩 ${escapeHtml(s)}</span>`).join('') +
+      refs.map(r => `<span class="skill-chip">📄 ${escapeHtml(r)}</span>`).join('');
     // 更新第二階段徽章
     const badge = document.querySelector('.stage2-badge');
     if (badge) badge.textContent = '依 ' + file.name + ' 規範';
