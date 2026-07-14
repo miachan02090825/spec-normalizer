@@ -570,14 +570,14 @@ body {
   </div>
 
   <!-- Step 3: 放入 Skill -->
-  <div class="step-label" style="margin:24px 0 12px;"><span class="step-num">3</span> 放入 Skill 規範包（選用）</div>
+  <div class="step-label" style="margin:24px 0 12px;"><span class="step-num">3</span> 放入 Skill 規範包（必要）</div>
   <div class="skill-zone" id="skillZone">
     <input type="file" id="skillInput" accept=".zip" style="display:none;">
     <div class="skill-empty" id="skillEmpty">
       <span class="skill-icon">🧩</span>
       <div>
         <div class="skill-title">點擊或拖曳 skill 包（.zip）到這裡</div>
-        <div class="skill-desc">載入團隊 .agents skill 規範（Controller / Repository / DTO 生成慣例），後端程式將依此產出。未載入時使用內建 GTW_Admin2Api 慣例。</div>
+        <div class="skill-desc">載入團隊 .agents skill 規範（Controller / Repository / DTO 生成慣例），後端程式將依此產出。<b>三個步驟都完成後才會開始生成</b>；skill 包請向團隊技術負責人索取。</div>
       </div>
     </div>
     <div class="skill-loaded" id="skillLoaded" style="display:none;">
@@ -1801,16 +1801,25 @@ function selectTemplate(key, opts) {
   document.querySelectorAll('.tpl-card').forEach(c => {
     c.classList.toggle('selected', c.getAttribute('data-tpl') === key);
   });
-  // 已上傳文件 → 切換模板立即以新風格重新生成前端
-  if (window._lastState && !(opts && opts.silent)) runLocalGeneration();
+  // 三步驟齊全時 → 切換模板立即以新風格重新生成前端
+  if (!(opts && opts.silent) && !missingSteps().length) runLocalGeneration();
 }
 
 // ─── Auto-generate after upload（選好模板＋解析完成 → 直接產生畫面）──────────
+// 三步驟必須全部完成（1 選模板、2 上傳文件、3 放入 Skill 包）才能生成
+function missingSteps() {
+  const miss = [];
+  if (!window._selectedTemplate) miss.push('步驟 1 選擇模板');
+  if (!window._lastState)       miss.push('步驟 2 上傳規格文件');
+  if (!window._skillPack)       miss.push('步驟 3 放入 Skill 規範包');
+  return miss;
+}
+
 function autoGenerateIfReady() {
-  if (!window._selectedTemplate) {
-    // 未選模板 → 用 Admin 2 預設風格，不中斷流程（步驟 1 可隨時更換）
-    selectTemplate('admin2', { silent: true });
-    showToast('未選模板，已用 Admin 2 白底風格（步驟 1 可隨時更換）');
+  const miss = missingSteps();
+  if (miss.length) {
+    showToast('✔ 文件已解析，尚未生成 — 還差：' + miss.join('、'));
+    return;
   }
   runLocalGeneration();
   runBackendGeneration(); // 第二階段：後端程式同步生成（與前端同一份欄位）
@@ -2093,10 +2102,10 @@ ${tplKey === 'admin3' ? `
 }
 
 function runLocalGeneration() {
+  const miss = missingSteps();
+  if (miss.length) { showError('請先完成：' + miss.join('、')); return; }
   const state = window._lastState;
-  if (!state) { showError('請先上傳規格文件'); return; }
   const tplKey = window._selectedTemplate;
-  if (!tplKey) { showError('請先在步驟 1 選擇後台模板風格'); return; }
   const tpl = ADMIN_TEMPLATES[tplKey];
 
   const wrap    = document.getElementById('designOutputWrap');
@@ -2728,8 +2737,9 @@ async function loadData() {
 }
 
 function runBackendGeneration() {
+  const miss = missingSteps();
+  if (miss.length) { showError('請先完成：' + miss.join('、')); return; }
   const state = window._lastState;
-  if (!state) { showError('請先上傳規格文件'); return; }
 
   // 每個工具（xlsx 顯示分頁）各產一組後端檔案
   const tools = extractTools(state);
@@ -3099,10 +3109,12 @@ async function loadSkillPack(file) {
     const badge = document.querySelector('.stage2-badge');
     if (badge) badge.textContent = '依 ' + file.name + ' 規範';
     showToast('🧩 Skill 包已載入：' + skills.length + ' 個 skill');
-    // 文件已上傳 → 依新規範自動重新生成後端（解決「先上傳才放 skill」順序問題）
-    if (window._lastState && window._backendFiles) {
-      runBackendGeneration();
-      showToast('🧩 已依 ' + file.name + ' 重新生成後端程式');
+    // 三步驟到齊 → 自動生成（首次生成或依新規範重新生成皆走此路）
+    if (!missingSteps().length) {
+      autoGenerateIfReady();
+      showToast('🧩 三步驟完成，已依 ' + file.name + ' 生成前後端');
+    } else if (window._lastState || window._selectedTemplate) {
+      showToast('還差：' + missingSteps().join('、'));
     }
   } catch (err) {
     showError('Skill 包解析失敗：' + err.message);
@@ -3117,6 +3129,7 @@ function removeSkillPack(e) {
   document.getElementById('skillLoaded').style.display = 'none';
   const badge = document.querySelector('.stage2-badge');
   if (badge) badge.textContent = 'GTW_Admin2Api 慣例';
+  showToast('已移除 Skill 包 — 需重新放入才能再次生成');
 }
 
 document.getElementById('resetBtn').addEventListener('click', () => {
